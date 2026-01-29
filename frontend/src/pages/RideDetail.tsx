@@ -111,15 +111,14 @@ export function RideDetail() {
 
       <div className="ride-stats">
         <div className="stat">
-          <span className="stat-label">Available Seats</span>
+          <span className="stat-label">Seats</span>
           <span className="stat-value">{ride.available_seats}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Seats Remaining</span>
+          <span className="stat-label">Remaining</span>
           <span className="stat-value">{ride.seats_remaining}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Status</span>
           <span className={`stat-value ${ride.is_full ? 'full' : 'available'}`}>
             {ride.is_full ? 'Full' : 'Available'}
           </span>
