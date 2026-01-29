@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project
+.claude/
+CLAUDE.md
+*.sqlite3
+db.sqlite3
+staticfiles/
+media/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Frontend (built separately)
+frontend/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
