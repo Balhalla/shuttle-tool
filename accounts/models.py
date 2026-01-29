@@ -1,10 +1,20 @@
 """Custom User model with magic link authentication."""
+import hashlib
 import secrets
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 from django.conf import settings
+
+
+def hash_token(token):
+    """Hash a token using SHA-256 for secure storage.
+
+    Since tokens are high-entropy (48 bytes from secrets.token_urlsafe),
+    unsalted SHA-256 is sufficient — no rainbow table risk.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 class UserManager(BaseUserManager):
@@ -71,24 +81,34 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.email
 
     def generate_magic_token(self):
-        """Generate a new magic token for email authentication (one-time use)."""
-        self.magic_token = secrets.token_urlsafe(48)
+        """Generate a new magic token for email authentication (one-time use).
+
+        Returns the raw token (for use in URLs/emails).
+        Stores the SHA-256 hash in the database.
+        """
+        raw_token = secrets.token_urlsafe(48)
+        self.magic_token = hash_token(raw_token)
         expiry_minutes = getattr(settings, 'MAGIC_LINK_EXPIRY_MINUTES', 60)
         self.magic_token_expires_at = timezone.now() + timedelta(minutes=expiry_minutes)
         self.save(update_fields=['magic_token', 'magic_token_expires_at'])
-        return self.magic_token
+        return raw_token
 
     def generate_session_token(self):
-        """Generate a session token for API authentication (long-lived)."""
-        self.session_token = secrets.token_urlsafe(48)
+        """Generate a session token for API authentication (long-lived).
+
+        Returns the raw token (sent to the client).
+        Stores the SHA-256 hash in the database.
+        """
+        raw_token = secrets.token_urlsafe(48)
+        self.session_token = hash_token(raw_token)
         expiry_days = getattr(settings, 'SESSION_TOKEN_EXPIRY_DAYS', 7)
         self.session_token_expires_at = timezone.now() + timedelta(days=expiry_days)
         self.save(update_fields=['session_token', 'session_token_expires_at'])
-        return self.session_token
+        return raw_token
 
     def verify_magic_token(self, token):
         """Verify a magic token and clear it if valid (one-time use)."""
-        if not self.magic_token or self.magic_token != token:
+        if not self.magic_token or self.magic_token != hash_token(token):
             return False
         if self.magic_token_expires_at and timezone.now() > self.magic_token_expires_at:
             return False

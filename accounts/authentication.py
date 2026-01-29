@@ -2,7 +2,7 @@
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.utils import timezone
-from .models import User
+from .models import User, hash_token
 
 
 class SessionTokenAuthentication(BaseAuthentication):
@@ -28,7 +28,7 @@ class SessionTokenAuthentication(BaseAuthentication):
             return None
 
         try:
-            user = User.objects.get(session_token=token)
+            user = User.objects.get(session_token=hash_token(token))
 
             if user.session_token_expires_at and timezone.now() > user.session_token_expires_at:
                 raise AuthenticationFailed('Session has expired')

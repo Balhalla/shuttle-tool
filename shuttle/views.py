@@ -19,7 +19,7 @@ from .serializers import (
     PassengerSerializer, DriverPassengerSerializer, AdminAddPassengerSerializer,
 )
 from .permissions import IsAdmin, IsDriver, IsDriverOrAdmin
-from accounts.models import User, DriverAvailability
+from accounts.models import User, DriverAvailability, hash_token
 from accounts.serializers import DriverAvailabilitySerializer
 
 
@@ -178,19 +178,19 @@ def reserve_ride(request, ride_id):
         )
 
     # Create pending reservation
-    confirmation_token = secrets.token_urlsafe(48)
+    raw_confirmation_token = secrets.token_urlsafe(48)
     reservation = Reservation.objects.create(
         ride=ride,
         guest_email=email,
         guest_name=name,
         guest_phone=phone,
         status='pending',
-        confirmation_token=confirmation_token
+        confirmation_token=hash_token(raw_confirmation_token)
     )
 
-    # Send confirmation email
+    # Send confirmation email (use raw token in URL)
     frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
-    confirm_link = f"{frontend_url}/confirm/{confirmation_token}"
+    confirm_link = f"{frontend_url}/confirm/{raw_confirmation_token}"
 
     send_mail(
         subject='Confirm Your Shuttle Reservation',
@@ -229,7 +229,7 @@ def confirm_reservation(request, token):
         with transaction.atomic():
             # Use select_for_update to prevent race conditions
             reservation = Reservation.objects.select_for_update().get(
-                confirmation_token=token,
+                confirmation_token=hash_token(token),
                 status='pending'
             )
 

@@ -7,7 +7,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from .models import User
+from .models import User, hash_token
 from .serializers import (
     UserSerializer, RequestMagicLinkSerializer, VerifyTokenSerializer
 )
@@ -53,7 +53,7 @@ def verify_token(request, token):
     try:
         with transaction.atomic():
             # Use select_for_update to prevent race conditions
-            user = User.objects.select_for_update().get(magic_token=token)
+            user = User.objects.select_for_update().get(magic_token=hash_token(token))
 
             # Check if token is expired
             if user.magic_token_expires_at and timezone.now() > user.magic_token_expires_at:
