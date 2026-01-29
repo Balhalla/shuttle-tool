@@ -26,6 +26,7 @@ urlpatterns = [
 
     # User endpoints (authenticated)
     path('my/reservations/', views.my_reservations, name='my_reservations'),
+    path('my/reservations/<int:reservation_id>/cancel/', views.cancel_my_reservation, name='cancel_my_reservation'),
 
     # Driver endpoints
     path('driver/rides/', views.driver_rides, name='driver_rides'),

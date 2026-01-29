@@ -320,6 +320,25 @@ def my_reservations(request):
     return Response(serializer.data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_my_reservation(request, reservation_id):
+    """Cancel a reservation owned by the current user."""
+    try:
+        reservation = Reservation.objects.get(
+            Q(user=request.user) | Q(guest_email=request.user.email),
+            id=reservation_id,
+        )
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Reservation not found'}, status=404)
+
+    if reservation.status == 'cancelled':
+        return Response({'error': 'Reservation is already cancelled'}, status=400)
+
+    reservation.cancel()
+    return Response({'message': 'Reservation cancelled'})
+
+
 # =============================================================================
 # Driver Views
 # =============================================================================

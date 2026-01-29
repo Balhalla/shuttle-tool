@@ -131,6 +131,12 @@ class ApiClient {
     return this.request<import('../types').Reservation[]>('/my/reservations/');
   }
 
+  async cancelMyReservation(id: number) {
+    return this.request<{ message: string }>(`/my/reservations/${id}/cancel/`, {
+      method: 'POST',
+    });
+  }
+
   async getLocations() {
     return this.request<import('../types').Location[]>('/locations/');
   }

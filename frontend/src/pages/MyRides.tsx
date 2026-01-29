@@ -7,6 +7,7 @@ export function MyRides() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadReservations();
@@ -20,6 +21,19 @@ export function MyRides() {
       setError(err instanceof Error ? err.message : 'Failed to load reservations');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancel = async (id: number) => {
+    if (!confirm('Are you sure you want to cancel this reservation?')) return;
+    setCancellingId(id);
+    try {
+      await api.cancelMyReservation(id);
+      setReservations((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel reservation');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -74,6 +88,13 @@ export function MyRides() {
                   {reservation.ride.is_vip && <span className="vip-badge">VIP</span>}
                 </div>
               </div>
+              <button
+                onClick={() => handleCancel(reservation.id)}
+                disabled={cancellingId === reservation.id}
+                className="btn btn-danger btn-small"
+              >
+                {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
+              </button>
             </div>
           ))}
         </div>
