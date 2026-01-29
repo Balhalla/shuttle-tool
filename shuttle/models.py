@@ -109,12 +109,21 @@ class Ride(models.Model):
 
     @property
     def reserved_seats(self):
-        """Count of confirmed reservations."""
-        return self.reservations.filter(status='confirmed').count()
+        """Count of confirmed + active pending reservations.
+
+        Pending reservations hold a seat for the duration of their
+        confirmation window so unverified users don't lose their spot.
+        """
+        from django.db.models import Q
+        from django.utils import timezone
+        return self.reservations.filter(
+            Q(status='confirmed') |
+            Q(status='pending', expires_at__gt=timezone.now())
+        ).count()
 
     @property
     def seats_remaining(self):
-        """Available seats minus confirmed reservations."""
+        """Available seats minus reserved (confirmed + active pending)."""
         return self.available_seats - self.reserved_seats
 
     @property
