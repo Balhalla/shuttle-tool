@@ -7,7 +7,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from .models import User, hash_token
+from .models import User, SessionToken, hash_token
 from .serializers import (
     UserSerializer, RequestMagicLinkSerializer, VerifyTokenSerializer
 )
@@ -68,7 +68,7 @@ def verify_token(request, token):
             user.save(update_fields=['magic_token', 'magic_token_expires_at'])
 
             # Generate a new session token for API authentication
-            session_token = user.generate_session_token()
+            session_token = SessionToken.create_for_user(user)
 
             return Response({
                 'user': UserSerializer(user).data,
@@ -91,6 +91,11 @@ def get_current_user(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout(request):
-    """Logout by clearing the user's session token."""
-    request.user.clear_session_token()
+    """Logout by deleting the current session token only."""
+    # request.auth is the raw token from the Authorization header
+    if request.auth:
+        SessionToken.objects.filter(
+            user=request.user,
+            token=hash_token(request.auth),
+        ).delete()
     return Response({'message': 'Logged out successfully'})

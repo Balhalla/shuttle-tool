@@ -1,18 +1,12 @@
 """Custom authentication for session tokens."""
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.exceptions import AuthenticationFailed
-from django.utils import timezone
-from .models import User, hash_token
+from .models import SessionToken
 
 
 class SessionTokenAuthentication(BaseAuthentication):
     """
     Custom authentication using session tokens.
     Expects header: Authorization: Bearer <token>
-
-    Session tokens are separate from magic link tokens:
-    - Magic tokens: one-time use for email verification, short expiry
-    - Session tokens: used for API authentication, long-lived
     """
     keyword = 'Bearer'
 
@@ -27,15 +21,11 @@ class SessionTokenAuthentication(BaseAuthentication):
         if not token:
             return None
 
-        try:
-            user = User.objects.get(session_token=hash_token(token))
-
-            if user.session_token_expires_at and timezone.now() > user.session_token_expires_at:
-                raise AuthenticationFailed('Session has expired')
-
-            return (user, token)
-        except User.DoesNotExist:
+        user = SessionToken.authenticate(token)
+        if user is None:
             return None
+
+        return (user, token)
 
     def authenticate_header(self, request):
         return self.keyword

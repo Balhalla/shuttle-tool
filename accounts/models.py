@@ -50,10 +50,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     magic_token = models.CharField(max_length=64, blank=True, null=True, unique=True)
     magic_token_expires_at = models.DateTimeField(blank=True, null=True)
 
-    # Session token fields (for API authentication after login)
-    session_token = models.CharField(max_length=64, blank=True, null=True, unique=True)
-    session_token_expires_at = models.DateTimeField(blank=True, null=True)
-
     # Driver-specific fields
     phone = models.CharField(max_length=20, blank=True)
     default_car = models.ForeignKey(
@@ -93,19 +89,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.save(update_fields=['magic_token', 'magic_token_expires_at'])
         return raw_token
 
-    def generate_session_token(self):
-        """Generate a session token for API authentication (long-lived).
-
-        Returns the raw token (sent to the client).
-        Stores the SHA-256 hash in the database.
-        """
-        raw_token = secrets.token_urlsafe(48)
-        self.session_token = hash_token(raw_token)
-        expiry_days = getattr(settings, 'SESSION_TOKEN_EXPIRY_DAYS', 7)
-        self.session_token_expires_at = timezone.now() + timedelta(days=expiry_days)
-        self.save(update_fields=['session_token', 'session_token_expires_at'])
-        return raw_token
-
     def verify_magic_token(self, token):
         """Verify a magic token and clear it if valid (one-time use)."""
         if not self.magic_token or self.magic_token != hash_token(token):
@@ -117,12 +100,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.magic_token_expires_at = None
         self.save(update_fields=['magic_token', 'magic_token_expires_at'])
         return True
-
-    def clear_session_token(self):
-        """Clear the session token (logout)."""
-        self.session_token = None
-        self.session_token_expires_at = None
-        self.save(update_fields=['session_token', 'session_token_expires_at'])
 
     @property
     def is_driver(self):
@@ -157,3 +134,41 @@ class DriverAvailability(models.Model):
     def contains_time(self, dt):
         """Check if a datetime falls within this availability window."""
         return self.start_time <= dt <= self.end_time
+
+
+class SessionToken(models.Model):
+    """Session tokens for API authentication. Multiple tokens per user supported."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='session_tokens')
+    token = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'session_tokens'
+
+    def __str__(self):
+        return f"Session for {self.user.email} (expires {self.expires_at})"
+
+    @classmethod
+    def create_for_user(cls, user):
+        """Create a new session token for a user. Returns the raw token."""
+        raw_token = secrets.token_urlsafe(48)
+        expiry_days = getattr(settings, 'SESSION_TOKEN_EXPIRY_DAYS', 7)
+        cls.objects.create(
+            user=user,
+            token=hash_token(raw_token),
+            expires_at=timezone.now() + timedelta(days=expiry_days),
+        )
+        return raw_token
+
+    @classmethod
+    def authenticate(cls, raw_token):
+        """Look up a user by raw token. Returns the user or None."""
+        try:
+            session = cls.objects.select_related('user').get(token=hash_token(raw_token))
+            if timezone.now() > session.expires_at:
+                session.delete()
+                return None
+            return session.user
+        except cls.DoesNotExist:
+            return None

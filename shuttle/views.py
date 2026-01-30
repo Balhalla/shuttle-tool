@@ -276,7 +276,8 @@ def confirm_reservation(request, token):
 
             # Generate a session token for the user (7-day expiry)
             from accounts.serializers import UserSerializer
-            session_token = user.generate_session_token()
+            from accounts.models import SessionToken
+            session_token = SessionToken.create_for_user(user)
 
             return Response({
                 'message': 'Reservation confirmed!',
