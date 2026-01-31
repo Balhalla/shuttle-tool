@@ -29,6 +29,7 @@ export function Login() {
           <h1>Check Your Email</h1>
           <p>We've sent a magic link to <strong>{email}</strong></p>
           <p>Click the link in the email to log in.</p>
+          <p><small>Can't find it? Check your spam or junk folder.</small></p>
         </div>
       </div>
     );

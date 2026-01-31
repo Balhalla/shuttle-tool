@@ -63,7 +63,7 @@ export function RideDetail() {
         loadRide(); // Refresh ride to update seat count
         refreshUser(); // Refresh user to update saved phone/name
       } else {
-        setSuccess('Reservation created! Please check your email to confirm.');
+        setSuccess('Reservation created! Please check your email to confirm. Can\'t find it? Check your spam or junk folder.');
       }
       if (!user) {
         setForm({ email: '', name: '', phone: '' });
