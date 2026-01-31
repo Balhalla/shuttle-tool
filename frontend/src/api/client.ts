@@ -304,7 +304,7 @@ class ApiClient {
     return this.request<import('../types').Passenger[]>(`/admin/rides/${rideId}/passengers/`);
   }
 
-  async adminAddPassenger(rideId: number, data: { name: string; email?: string }) {
+  async adminAddPassenger(rideId: number, data: { name: string; email?: string; phone?: string }) {
     return this.request<import('../types').Passenger>(`/admin/rides/${rideId}/add_passenger/`, {
       method: 'POST',
       body: JSON.stringify(data),

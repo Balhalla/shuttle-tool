@@ -519,10 +519,34 @@ class AdminRideViewSet(viewsets.ModelViewSet):
         serializer = AdminAddPassengerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        name = serializer.validated_data['name']
+        email = serializer.validated_data.get('email', '')
+        phone = serializer.validated_data.get('phone', '')
+
+        # If email provided, get or create a user account so they can log in
+        user = None
+        if email:
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={'name': name, 'phone': phone, 'role': 'public'}
+            )
+            if not created:
+                updated_fields = []
+                if phone and user.phone != phone:
+                    user.phone = phone
+                    updated_fields.append('phone')
+                if name and user.name != name:
+                    user.name = name
+                    updated_fields.append('name')
+                if updated_fields:
+                    user.save(update_fields=updated_fields)
+
         reservation = Reservation.objects.create(
             ride=ride,
-            guest_name=serializer.validated_data['name'],
-            guest_email=serializer.validated_data.get('email', ''),
+            user=user,
+            guest_name=name,
+            guest_email=email,
+            guest_phone=phone,
             status='confirmed',
             added_by_admin=True
         )

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
-import { PhoneLink } from '../../components/PhoneInput';
+import { PhoneInput, PhoneLink } from '../../components/PhoneInput';
 import type { Ride, Passenger } from '../../types';
 
 export function AdminRidePassengers() {
@@ -15,6 +15,7 @@ export function AdminRidePassengers() {
   const [form, setForm] = useState({
     name: '',
     email: '',
+    phone: '',
   });
 
   useEffect(() => {
@@ -48,8 +49,9 @@ export function AdminRidePassengers() {
       await api.adminAddPassenger(parseInt(rideId), {
         name: form.name,
         email: form.email || undefined,
+        phone: form.phone || undefined,
       });
-      setForm({ name: '', email: '' });
+      setForm({ name: '', email: '', phone: '' });
       setShowForm(false);
       loadData();
     } catch (err) {
@@ -160,6 +162,14 @@ export function AdminRidePassengers() {
                   placeholder="passenger@email.com"
                 />
               </div>
+              <div className="form-group">
+                <label htmlFor="phone">Phone (optional)</label>
+                <PhoneInput
+                  id="phone"
+                  value={form.phone}
+                  onChange={(value) => setForm({ ...form, phone: value })}
+                />
+              </div>
               <p className="form-note">
                 Passengers added by admin are automatically confirmed and do not need to confirm via email.
               </p>
@@ -168,7 +178,7 @@ export function AdminRidePassengers() {
                   type="button"
                   onClick={() => {
                     setShowForm(false);
-                    setForm({ name: '', email: '' });
+                    setForm({ name: '', email: '', phone: '' });
                   }}
                   className="btn btn-secondary"
                 >

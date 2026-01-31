@@ -109,6 +109,7 @@ class AdminAddPassengerSerializer(serializers.Serializer):
     """Serializer for admin to add a passenger to a ride."""
     name = serializers.CharField(max_length=255)
     email = serializers.EmailField(required=False, allow_blank=True, default='')
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
 
 
 class DriverPassengerSerializer(serializers.ModelSerializer):
