@@ -361,18 +361,40 @@ body {
   color: #666;
 }
 
-.phone-local-input {
+.phone-local-wrapper {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.phone-local-input {
+  width: 100%;
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 1rem;
+  box-sizing: border-box;
 }
 
 .phone-local-input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.phone-local-input.phone-input-invalid {
+  border-color: #e53e3e;
+}
+
+.phone-local-input.phone-input-invalid:focus {
+  border-color: #e53e3e;
+  box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+}
+
+.phone-validation-msg {
+  color: #e53e3e;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
 }
 
 /* Phone links with WhatsApp */

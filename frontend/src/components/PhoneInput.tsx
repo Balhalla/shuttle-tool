@@ -221,6 +221,17 @@ const COUNTRY_CODES = [
   { code: '+263', country: 'Zimbabwe', iso: 'ZW' },
 ];
 
+// Expected number of digits in the local part (after country code, without leading zero)
+// for Belgium and neighbouring countries
+const LOCAL_DIGIT_LENGTHS: Record<string, { min: number; max: number; label: string; placeholder: string }> = {
+  '+32':  { min: 8, max: 9, label: 'Belgian', placeholder: '4xx xx xx xx' },
+  '+33':  { min: 9, max: 9, label: 'French', placeholder: '6 xx xx xx xx' },
+  '+49':  { min: 10, max: 11, label: 'German', placeholder: '1xx xxxx xxxx' },
+  '+31':  { min: 9, max: 9, label: 'Dutch', placeholder: '6 xxxx xxxx' },
+  '+352': { min: 8, max: 9, label: 'Luxembourg', placeholder: '6xx xxx xxx' },
+  '+44':  { min: 10, max: 10, label: 'UK', placeholder: '7xxx xxxxxx' },
+};
+
 interface PhoneInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -247,13 +258,13 @@ export function PhoneInput({ value, onChange, required, disabled, id }: PhoneInp
       if (phone.startsWith(code)) {
         return {
           countryCode: code,
-          localNumber: phone.slice(code.length).replace(/\D/g, ''),
+          localNumber: phone.slice(code.length).replace(/\D/g, '').replace(/^0+/, ''),
         };
       }
     }
 
     // If no match, assume it's a local number with default country code
-    return { countryCode: '+32', localNumber: phone.replace(/\D/g, '') };
+    return { countryCode: '+32', localNumber: phone.replace(/\D/g, '').replace(/^0+/, '') };
   };
 
   const [countryCode, setCountryCode] = useState('+32');
@@ -282,14 +293,21 @@ export function PhoneInput({ value, onChange, required, disabled, id }: PhoneInp
   const handleCountryChange = (newCode: string) => {
     setCountryCode(newCode);
     setIsOpen(false);
-    if (localNumber) {
-      onChange(`${newCode}${localNumber}`);
+    // Re-strip leading zero when switching countries (user may have entered with zero for previous country)
+    const stripped = localNumber.replace(/^0+/, '');
+    setLocalNumber(stripped);
+    if (stripped) {
+      onChange(`${newCode}${stripped}`);
     }
   };
 
   const handleLocalChange = (newLocal: string) => {
     // Only allow digits, remove any non-numeric characters
-    const digitsOnly = newLocal.replace(/\D/g, '');
+    let digitsOnly = newLocal.replace(/\D/g, '');
+    // Strip leading zero — in E.164 format the zero after the country code is dropped
+    if (digitsOnly.startsWith('0')) {
+      digitsOnly = digitsOnly.replace(/^0+/, '');
+    }
     setLocalNumber(digitsOnly);
     if (digitsOnly) {
       onChange(`${countryCode}${digitsOnly}`);
@@ -297,6 +315,18 @@ export function PhoneInput({ value, onChange, required, disabled, id }: PhoneInp
       onChange('');
     }
   };
+
+  // Validate length for known countries
+  const lengthRule = LOCAL_DIGIT_LENGTHS[countryCode];
+  const digitCount = localNumber.length;
+  let validationMsg = '';
+  if (lengthRule && localNumber) {
+    if (digitCount < lengthRule.min) {
+      validationMsg = `${lengthRule.label} numbers need at least ${lengthRule.min} digits (currently ${digitCount})`;
+    } else if (digitCount > lengthRule.max) {
+      validationMsg = `${lengthRule.label} numbers have at most ${lengthRule.max} digits (currently ${digitCount})`;
+    }
+  }
 
   const selectedCountry = COUNTRY_CODES.find(c => c.code === countryCode) || COUNTRY_CODES[0];
 
@@ -330,18 +360,23 @@ export function PhoneInput({ value, onChange, required, disabled, id }: PhoneInp
           </div>
         )}
       </div>
-      <input
-        id={id}
-        type="tel"
-        value={localNumber}
-        onChange={(e) => handleLocalChange(e.target.value)}
-        required={required}
-        disabled={disabled}
-        placeholder="Phone number"
-        className="phone-local-input"
-        pattern="[0-9]*"
-        inputMode="numeric"
-      />
+      <div className="phone-local-wrapper">
+        <input
+          id={id}
+          type="tel"
+          value={localNumber}
+          onChange={(e) => handleLocalChange(e.target.value)}
+          required={required}
+          disabled={disabled}
+          placeholder={LOCAL_DIGIT_LENGTHS[countryCode]?.placeholder ?? 'Phone number'}
+          className={`phone-local-input${validationMsg ? ' phone-input-invalid' : ''}`}
+          pattern="[0-9]*"
+          inputMode="numeric"
+        />
+        {validationMsg && (
+          <div className="phone-validation-msg">{validationMsg}</div>
+        )}
+      </div>
     </div>
   );
 }
