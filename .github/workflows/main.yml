@@ -22,7 +22,7 @@ env:
 
 jobs:
   deploy-frontend:
-    name: Check out, build assets and deploy
+    name: "Frontend: Check out, build assets and deploy"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -63,7 +63,7 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: ./frontend
-          file: ./Dockerfile
+          file: ./frontend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -75,7 +75,7 @@ jobs:
             VERSION_NUMBER=${{ github.ref_name }}
 
   deploy-backend:
-    name: Check out, build assets and deploy
+    name: "Backend: Check out, build assets and deploy"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
