@@ -62,8 +62,8 @@ jobs:
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
-          context: .
-          file: ./frontend/Dockerfile
+          context: ./frontend
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -73,6 +73,7 @@ jobs:
           no-cache: ${{ inputs.no_docker_cache == 'true' }}
           build-args: |
             VERSION_NUMBER=${{ github.ref_name }}
+
   deploy-backend:
     name: Check out, build assets and deploy
     runs-on: ubuntu-latest
