@@ -21,7 +21,7 @@ env:
   PLATFORM: linux/arm64
 
 jobs:
-  deploy:
+  deploy-frontend:
     name: Check out, build assets and deploy
     runs-on: ubuntu-latest
     steps:
@@ -50,7 +50,59 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: balhallavzw/shuttle-tool
+          images: balhallavzw/shuttle-tool-frontend
+          tags: |
+            type=raw,value=latest
+            type=semver,pattern={{version}}
+          labels: |
+            org.opencontainers.image.version={{version}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          file: .frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ env.PLATFORM }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache: ${{ inputs.no_docker_cache == 'true' }}
+          build-args: |
+            VERSION_NUMBER=${{ github.ref_name }}
+  deploy-backend:
+    name: Check out, build assets and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up QEMU (${{ env.PLATFORM }})
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          platforms: ${{ env.PLATFORM }}
+          # image: tonistiigi/binfmt:qemu-v7.0.0 # Temporarily locking the qemu version, as the current one (qemu-v9.2.0-51) results in a failed build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          # version: v0.11.2
+          platforms: ${{ env.PLATFORM }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # V3.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: balhallavzw/shuttle-tool-backend
           tags: |
             type=raw,value=latest
             type=semver,pattern={{version}}
