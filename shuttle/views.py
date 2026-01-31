@@ -200,7 +200,7 @@ Please confirm your shuttle reservation:
 
 From: {ride.origin.name}
 To: {ride.destination.name}
-Departure: {ride.departure_time.strftime('%Y-%m-%d %H:%M')}
+Departure: {timezone.localtime(ride.departure_time).strftime('%Y-%m-%d %H:%M')}
 
 Click here to confirm: {confirm_link}
 
@@ -427,7 +427,7 @@ def send_discord_notification(ride, driver, car, passenger_count):
     import requests
     try:
         # Format departure time
-        departure_str = ride.departure_time.strftime('%H:%M')
+        departure_str = timezone.localtime(ride.departure_time).strftime('%H:%M')
 
         message = {
             'embeds': [{
