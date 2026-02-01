@@ -402,6 +402,13 @@ export function AdminRides() {
 
       {error && <div className="error">{error}</div>}
 
+      <div className="color-legend">
+        <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#d4edda' }} /> All departed</span>
+        <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#fff3cd' }} /> Partially departed</span>
+        <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#f8d7da' }} /> Overbooked</span>
+        <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#ffe4b3' }} /> Driver conflict</span>
+      </div>
+
       {showForm && (
         <div className="modal-overlay">
           <div className="modal">
