@@ -20,6 +20,15 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         setConfig(data);
         document.title = data.title;
+        if (data.favicon_url) {
+          let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = data.favicon_url;
+        }
       })
       .catch(() => {
         // Use default title on error

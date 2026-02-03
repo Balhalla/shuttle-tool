@@ -31,9 +31,12 @@ from accounts.serializers import DriverAvailabilitySerializer
 @permission_classes([AllowAny])
 def app_config(request):
     """Return public app configuration."""
-    return Response({
+    data = {
         'title': settings.APP_TITLE,
-    })
+    }
+    if settings.FAVICON_URL:
+        data['favicon_url'] = settings.FAVICON_URL
+    return Response(data)
 
 
 # =============================================================================

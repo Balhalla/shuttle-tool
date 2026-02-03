@@ -2,6 +2,7 @@ const API_BASE = '/api';
 
 export interface AppConfig {
   title: string;
+  favicon_url?: string;
 }
 
 class ApiClient {

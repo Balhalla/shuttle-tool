@@ -147,6 +147,7 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 # App configuration
 APP_TITLE = os.environ.get('APP_TITLE', 'Shuttle')
+FAVICON_URL = os.environ.get('FAVICON_URL', '')
 
 # Discord webhook (optional)
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
