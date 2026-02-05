@@ -36,6 +36,8 @@ def app_config(request):
     }
     if settings.FAVICON_URL:
         data['favicon_url'] = settings.FAVICON_URL
+    if settings.DEMO_SITE:
+        data['demo_site'] = True
     return Response(data)
 
 

@@ -18,6 +18,22 @@ body {
   flex-direction: column;
 }
 
+/* Demo banner */
+.demo-banner {
+  background-color: #fff3cd;
+  color: #856404;
+  border-bottom: 1px solid #ffc107;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.demo-banner a {
+  color: #856404;
+  font-weight: 700;
+}
+
 /* Header */
 .header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

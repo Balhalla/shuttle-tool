@@ -49,6 +49,12 @@ export function Layout() {
           </div>
         </nav>
       </header>
+      {config?.demo_site && (
+        <div className="demo-banner">
+          This site is in testing mode. The data shown is not real. Please report bugs to{' '}
+          <a href="mailto:shuttle@balhallafestival.be">shuttle@balhallafestival.be</a>
+        </div>
+      )}
       <main className="main">
         <Outlet />
       </main>
