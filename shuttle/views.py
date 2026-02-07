@@ -246,13 +246,8 @@ def confirm_reservation(request, token):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            if reservation.ride.is_full:
-                reservation.status = 'cancelled'
-                reservation.save()
-                return Response(
-                    {'error': 'Sorry, this ride is now fully booked'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # No need to check ride capacity here - the pending reservation
+            # already holds a seat within its 15-minute confirmation window.
 
             # Get or create user
             user, created = User.objects.get_or_create(
