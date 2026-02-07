@@ -57,10 +57,10 @@ export function RideDetail() {
 
     try {
       const result = await api.reserveRide(parseInt(rideId), form);
+      loadRide(); // Refresh ride to update seat count
       if (result.auto_confirmed) {
         setSuccess('Your reservation has been confirmed!');
         setAutoConfirmed(true);
-        loadRide(); // Refresh ride to update seat count
         refreshUser(); // Refresh user to update saved phone/name
       } else {
         setSuccess('Reservation created! Please check your email to confirm. Can\'t find it? Check your spam or junk folder.');
