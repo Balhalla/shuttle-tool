@@ -112,3 +112,19 @@ export interface AuthResponse {
   user: User;
   token: string;
 }
+
+export interface CsvImportSuccess {
+  rides_created: number;
+  assignments_created: number;
+}
+
+export interface CsvImportRowError {
+  row: number;
+  errors: string[];
+}
+
+export interface CsvImportError {
+  error?: string;
+  row_errors?: CsvImportRowError[];
+  group_errors?: string[];
+}

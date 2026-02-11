@@ -1,10 +1,14 @@
 """Views for shuttle app."""
+import csv
+import io
 import secrets
+from collections import defaultdict
 from datetime import timedelta
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
@@ -494,6 +498,40 @@ class AdminLocationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdmin]
 
 
+def _parse_datetime_flexible(value):
+    """Parse a datetime string in various formats, returns timezone-aware datetime or None."""
+    from django.utils.dateparse import parse_datetime as django_parse_datetime
+    from datetime import datetime
+
+    if not value:
+        return None
+
+    # Try ISO format first (e.g., 2026-07-15T22:00:00, 2026-07-15T22:00)
+    dt = django_parse_datetime(value)
+    if dt:
+        if timezone.is_naive(dt):
+            dt = timezone.make_aware(dt)
+        return dt
+
+    # Try common formats
+    formats = [
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%d/%m/%Y %H:%M:%S',
+        '%d/%m/%Y %H:%M',
+        '%d/%m/%y %H:%M:%S',
+        '%d/%m/%y %H:%M',
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(value, fmt)
+            return timezone.make_aware(dt)
+        except ValueError:
+            continue
+
+    return None
+
+
 class AdminRideViewSet(viewsets.ModelViewSet):
     """Admin CRUD for rides."""
     queryset = Ride.objects.all().select_related('origin', 'destination').prefetch_related('assignments__driver', 'assignments__car')
@@ -607,6 +645,199 @@ class AdminRideViewSet(viewsets.ModelViewSet):
                 {'error': 'Assignment not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=False, methods=['post'], url_path='import-csv', parser_classes=[MultiPartParser])
+    def import_csv(self, request):
+        """Import rides from a CSV file.
+
+        CSV format: departure_time,origin,destination,driver_email,car_name,is_vip
+        Rows with identical (departure_time, origin, destination, is_vip) are merged
+        into one ride with multiple driver/car assignments.
+        """
+        # --- File validation ---
+        csv_file = request.FILES.get('file')
+        if not csv_file:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not csv_file.name.endswith('.csv'):
+            return Response({'error': 'File must be a .csv file'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if csv_file.size > 1_048_576:  # 1MB
+            return Response({'error': 'File too large (max 1MB)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- Parse CSV ---
+        try:
+            content = csv_file.read().decode('utf-8-sig')  # utf-8-sig handles Excel BOM
+        except UnicodeDecodeError:
+            return Response({'error': 'File must be UTF-8 encoded'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reader = csv.DictReader(io.StringIO(content))
+        if not reader.fieldnames:
+            return Response({'error': 'CSV file is empty'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Normalize headers (strip whitespace, lowercase)
+        reader.fieldnames = [f.strip().lower() for f in reader.fieldnames]
+
+        required_headers = {'departure_time', 'origin', 'destination'}
+        missing = required_headers - set(reader.fieldnames)
+        if missing:
+            return Response(
+                {'error': f'Missing required columns: {", ".join(sorted(missing))}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- Build lookup caches ---
+        location_map = {loc.name.lower(): loc for loc in Location.objects.all()}
+        driver_map = {u.email.lower(): u for u in User.objects.filter(Q(role='driver') | Q(role='admin'))}
+        car_map = {c.name.lower(): c for c in Car.objects.all()}
+
+        # --- Phase 1: Per-row validation ---
+        row_errors = []
+        parsed_rows = []
+
+        for row_num, row in enumerate(reader, start=2):  # row 1 is header
+            errors = []
+
+            # Parse departure_time
+            raw_dt = (row.get('departure_time') or '').strip()
+            parsed_dt = _parse_datetime_flexible(raw_dt)
+            if not parsed_dt:
+                errors.append(f'Invalid departure_time: "{raw_dt}"')
+
+            # Lookup origin
+            raw_origin = (row.get('origin') or '').strip()
+            origin = location_map.get(raw_origin.lower()) if raw_origin else None
+            if not raw_origin:
+                errors.append('Missing origin')
+            elif not origin:
+                errors.append(f'Unknown origin: "{raw_origin}"')
+
+            # Lookup destination
+            raw_dest = (row.get('destination') or '').strip()
+            destination = location_map.get(raw_dest.lower()) if raw_dest else None
+            if not raw_dest:
+                errors.append('Missing destination')
+            elif not destination:
+                errors.append(f'Unknown destination: "{raw_dest}"')
+
+            # Parse is_vip
+            raw_vip = (row.get('is_vip') or '').strip().lower()
+            is_vip = raw_vip in ('true', '1', 'yes')
+
+            # Lookup driver (optional)
+            raw_driver = (row.get('driver_email') or '').strip()
+            driver = None
+            if raw_driver:
+                driver = driver_map.get(raw_driver.lower())
+                if not driver:
+                    errors.append(f'Unknown driver: "{raw_driver}"')
+
+            # Lookup car (optional)
+            raw_car = (row.get('car_name') or '').strip()
+            car = None
+            if raw_car:
+                car = car_map.get(raw_car.lower())
+                if not car:
+                    errors.append(f'Unknown car: "{raw_car}"')
+
+            # Driver and car must both be present or both absent
+            if bool(raw_driver) != bool(raw_car):
+                errors.append('driver_email and car_name must both be provided or both empty')
+
+            if errors:
+                row_errors.append({'row': row_num, 'errors': errors})
+            else:
+                parsed_rows.append({
+                    'departure_time': parsed_dt,
+                    'origin': origin,
+                    'destination': destination,
+                    'is_vip': is_vip,
+                    'driver': driver,
+                    'car': car,
+                })
+
+        if row_errors:
+            return Response(
+                {'row_errors': row_errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not parsed_rows:
+            return Response({'error': 'CSV file contains no data rows'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- Phase 2: Group rows and check for duplicates within groups ---
+        groups = defaultdict(list)
+        for row_data in parsed_rows:
+            key = (
+                row_data['departure_time'].isoformat(),
+                row_data['origin'].id,
+                row_data['destination'].id,
+                row_data['is_vip'],
+            )
+            groups[key].append(row_data)
+
+        group_errors = []
+        for key, group_rows in groups.items():
+            assignments = [(r['driver'], r['car']) for r in group_rows if r['driver'] and r['car']]
+            # Check duplicate drivers within same ride
+            seen_drivers = set()
+            dup_driver_names = []
+            for d, _ in assignments:
+                if d.id in seen_drivers:
+                    dup_driver_names.append(d.name)
+                seen_drivers.add(d.id)
+            if dup_driver_names:
+                dt_str = group_rows[0]['departure_time'].strftime('%Y-%m-%d %H:%M')
+                route = f"{group_rows[0]['origin'].name} \u2192 {group_rows[0]['destination'].name}"
+                group_errors.append(f'Duplicate driver(s) {", ".join(dup_driver_names)} in ride {route} at {dt_str}')
+
+            # Check duplicate cars within same ride
+            seen_cars = set()
+            dup_car_names = []
+            for _, c in assignments:
+                if c.id in seen_cars:
+                    dup_car_names.append(c.name)
+                seen_cars.add(c.id)
+            if dup_car_names:
+                dt_str = group_rows[0]['departure_time'].strftime('%Y-%m-%d %H:%M')
+                route = f"{group_rows[0]['origin'].name} \u2192 {group_rows[0]['destination'].name}"
+                group_errors.append(f'Duplicate car(s) {", ".join(dup_car_names)} in ride {route} at {dt_str}')
+
+        if group_errors:
+            return Response(
+                {'group_errors': group_errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- Phase 3: Atomic creation ---
+        rides_created = 0
+        assignments_created = 0
+
+        with transaction.atomic():
+            for key, group_rows in groups.items():
+                sample = group_rows[0]
+                ride = Ride.objects.create(
+                    origin=sample['origin'],
+                    destination=sample['destination'],
+                    departure_time=sample['departure_time'],
+                    is_vip=sample['is_vip'],
+                    created_by=request.user,
+                )
+                rides_created += 1
+
+                for row_data in group_rows:
+                    if row_data['driver'] and row_data['car']:
+                        RideAssignment.objects.create(
+                            ride=ride,
+                            driver=row_data['driver'],
+                            car=row_data['car'],
+                        )
+                        assignments_created += 1
+
+        return Response({
+            'rides_created': rides_created,
+            'assignments_created': assignments_created,
+        }, status=status.HTTP_201_CREATED)
 
 
 class AdminDriverViewSet(viewsets.ModelViewSet):

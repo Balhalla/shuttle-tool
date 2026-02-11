@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Ride, Location, User, Car, RideAssignment, DriverAvailability, TravelTime } from '../../types';
+import type { Ride, Location, User, Car, RideAssignment, DriverAvailability, TravelTime, CsvImportSuccess, CsvImportError } from '../../types';
 
 export function AdminRides() {
   const [rides, setRides] = useState<Ride[]>([]);
@@ -32,6 +32,12 @@ export function AdminRides() {
   const [showPastRides, setShowPastRides] = useState(false);
   const [driverAvailabilities, setDriverAvailabilities] = useState<DriverAvailability[]>([]);
   const [travelTimes, setTravelTimes] = useState<TravelTime[]>([]);
+
+  // CSV import state
+  const [showCsvImport, setShowCsvImport] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ success?: CsvImportSuccess; error?: CsvImportError } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -124,6 +130,32 @@ export function AdminRides() {
     });
     setEditingId(null);
     setShowForm(false);
+  };
+
+  const handleCsvImport = async () => {
+    if (!csvFile) return;
+    setCsvImporting(true);
+    setCsvResult(null);
+    try {
+      const result = await api.adminImportRidesCsv(csvFile);
+      setCsvResult({ success: result });
+      loadData();
+    } catch (err: unknown) {
+      const csvError = err as CsvImportError;
+      if (csvError.error || csvError.row_errors || csvError.group_errors) {
+        setCsvResult({ error: csvError });
+      } else {
+        setCsvResult({ error: { error: 'Import failed' } });
+      }
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
+  const closeCsvImport = () => {
+    setShowCsvImport(false);
+    setCsvFile(null);
+    setCsvResult(null);
   };
 
   const openAssignmentModal = (ride: Ride) => {
@@ -395,12 +427,86 @@ export function AdminRides() {
     <div className="admin-rides">
       <div className="page-header">
         <h1>Manage Rides</h1>
-        <button onClick={() => setShowForm(true)} className="btn btn-primary">
-          Add Ride
-        </button>
+        <div>
+          <button onClick={() => setShowCsvImport(true)} className="btn btn-secondary" style={{ marginRight: '0.5rem' }}>
+            Import CSV
+          </button>
+          <button onClick={() => setShowForm(true)} className="btn btn-primary">
+            Add Ride
+          </button>
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {showCsvImport && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Import Rides from CSV</h2>
+            <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
+              CSV format: <code>departure_time,origin,destination,driver_email,car_name,is_vip</code><br />
+              Rows with the same departure time, origin, destination, and VIP status are merged into one ride with multiple driver/car assignments.
+              Driver and car columns are optional.
+            </p>
+            <div className="form-group">
+              <label htmlFor="csv-file">CSV File</label>
+              <input
+                id="csv-file"
+                type="file"
+                accept=".csv"
+                onChange={(e) => {
+                  setCsvFile(e.target.files?.[0] || null);
+                  setCsvResult(null);
+                }}
+              />
+            </div>
+
+            {csvResult?.success && (
+              <div className="success" style={{ margin: '1rem 0', padding: '0.75rem', backgroundColor: '#d4edda', borderRadius: '4px' }}>
+                Import successful: {csvResult.success.rides_created} ride(s) and {csvResult.success.assignments_created} assignment(s) created.
+              </div>
+            )}
+
+            {csvResult?.error && (
+              <div className="error" style={{ margin: '1rem 0' }}>
+                {csvResult.error.error && <p>{csvResult.error.error}</p>}
+                {csvResult.error.row_errors && (
+                  <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                    {csvResult.error.row_errors.map((re, i) => (
+                      <li key={i}>
+                        <strong>Row {re.row}:</strong> {re.errors.join('; ')}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {csvResult.error.group_errors && (
+                  <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                    {csvResult.error.group_errors.map((ge, i) => (
+                      <li key={i}>{ge}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button type="button" onClick={closeCsvImport} className="btn btn-secondary">
+                {csvResult?.success ? 'Close' : 'Cancel'}
+              </button>
+              {!csvResult?.success && (
+                <button
+                  type="button"
+                  onClick={handleCsvImport}
+                  className="btn btn-primary"
+                  disabled={!csvFile || csvImporting}
+                >
+                  {csvImporting ? 'Importing...' : 'Import'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="color-legend">
         <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#d4edda' }} /> All departed</span>

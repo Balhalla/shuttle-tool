@@ -69,6 +69,15 @@ docker-compose up --build
 
 ```
 
+**Note:** All verification (tests, type checks, builds) must be run inside Docker containers, not locally:
+```bash
+# Run backend tests
+docker compose -f docker-compose.dev.yml exec backend python manage.py test
+
+# Type check frontend
+docker compose -f docker-compose.dev.yml exec frontend npx tsc --noEmit
+```
+
 ## Architecture
 
 ### Backend Structure
@@ -153,6 +162,7 @@ docker-compose up --build
 
 ### Admin
 - `GET/POST /api/admin/rides/` - CRUD rides
+- `POST /api/admin/rides/import-csv/` - Bulk import rides from CSV file
 - `GET/POST /api/admin/rides/{id}/assignments/` - Manage driver/car assignments
 - `DELETE /api/admin/rides/{id}/assignments/{assignment_id}/`
 - `GET /api/admin/rides/{id}/passengers/` - View passengers

@@ -57,6 +57,31 @@ class ApiClient {
     return response.json();
   }
 
+  private async uploadRequest<T>(
+    endpoint: string,
+    formData: FormData
+  ): Promise<T> {
+    const headers: Record<string, string> = {};
+    // No Content-Type header - browser sets multipart boundary automatically
+
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw error;
+    }
+
+    return response.json();
+  }
+
   // Config endpoint
   async getConfig() {
     return this.request<AppConfig>('/config/');
@@ -300,6 +325,15 @@ class ApiClient {
     return this.request<void>(`/admin/rides/${id}/`, {
       method: 'DELETE',
     });
+  }
+
+  async adminImportRidesCsv(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.uploadRequest<import('../types').CsvImportSuccess>(
+      '/admin/rides/import-csv/',
+      formData
+    );
   }
 
   async adminGetRidePassengers(rideId: number) {
