@@ -385,7 +385,9 @@ def driver_ride_passengers(request, ride_id):
     # Verify driver has an assignment for this ride
     assignment = get_object_or_404(RideAssignment, ride_id=ride_id, driver=request.user)
     ride = assignment.ride
-    reservations = ride.reservations.filter(status='confirmed')
+    reservations = ride.reservations.filter(
+        status__in=['confirmed', 'pending']
+    ).order_by('-status', 'created_at')  # confirmed first, then pending
     serializer = DriverPassengerSerializer(reservations, many=True)
     return Response(serializer.data)
 

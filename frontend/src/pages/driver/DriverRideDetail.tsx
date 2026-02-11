@@ -116,7 +116,9 @@ export function DriverRideDetail() {
     return 'present-other';
   };
 
-  const presentCount = passengers.filter((p) => p.is_present).length;
+  const confirmedPassengers = passengers.filter((p) => p.status === 'confirmed');
+  const pendingPassengers = passengers.filter((p) => p.status === 'pending');
+  const presentCount = confirmedPassengers.filter((p) => p.is_present).length;
 
   // Find current driver's assignment
   const myAssignment = ride?.assignments?.find(a => a.driver.id === user?.id);
@@ -210,12 +212,12 @@ export function DriverRideDetail() {
 
       <div className="passengers-section">
         <h2>
-          Passenger List ({passengers.length})
-          {passengers.length > 0 && (
+          Passenger List ({confirmedPassengers.length})
+          {confirmedPassengers.length > 0 && (
             <span className="present-count"> - {presentCount} present</span>
           )}
         </h2>
-        {passengers.length === 0 ? (
+        {confirmedPassengers.length === 0 ? (
           <p>No confirmed passengers yet.</p>
         ) : (
           <table className="passengers-table">
@@ -228,7 +230,7 @@ export function DriverRideDetail() {
               </tr>
             </thead>
             <tbody>
-              {passengers.map((passenger, index) => {
+              {confirmedPassengers.map((passenger, index) => {
                 const status = getPresenceStatus(passenger);
                 return (
                   <tr key={passenger.id} className={passenger.is_present ? 'present' : ''}>
@@ -256,6 +258,34 @@ export function DriverRideDetail() {
               })}
             </tbody>
           </table>
+        )}
+
+        {pendingPassengers.length > 0 && (
+          <>
+            <h3 style={{ marginTop: '1.5rem', color: '#856404' }}>
+              Unconfirmed ({pendingPassengers.length})
+            </h3>
+            <table className="passengers-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingPassengers.map((passenger, index) => (
+                  <tr key={passenger.id} style={{ opacity: 0.6 }}>
+                    <td>{index + 1}</td>
+                    <td>{passenger.name}</td>
+                    <td><PhoneLink phone={passenger.phone} className="phone-link" /></td>
+                    <td><span style={{ color: '#856404', fontSize: '0.85rem' }}>Pending</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </div>
