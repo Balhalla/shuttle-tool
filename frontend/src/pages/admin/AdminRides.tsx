@@ -321,6 +321,23 @@ export function AdminRides() {
     }
   };
 
+  const handleUndepartAssignment = async (assignmentId: number) => {
+    if (!assignmentModal) return;
+
+    try {
+      const updated = await api.adminUndepartAssignment(assignmentModal.rideId, assignmentId);
+      setAssignmentModal({
+        ...assignmentModal,
+        assignments: assignmentModal.assignments.map((a) =>
+          a.id === assignmentId ? updated : a
+        ),
+      });
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unmark departure');
+    }
+  };
+
   const handleRemoveAssignment = async (assignmentId: number) => {
     if (!assignmentModal) return;
 
@@ -600,13 +617,27 @@ export function AdminRides() {
                     <span>
                       <strong>{assignment.driver.name}</strong> with{' '}
                       <strong>{assignment.car.name}</strong> ({assignment.car.capacity} seats)
+                      {assignment.has_departed && (
+                        <span className="departed-badge" style={{ marginLeft: '0.5rem', fontSize: '0.8rem' }}>Departed</span>
+                      )}
                     </span>
-                    <button
-                      onClick={() => handleRemoveAssignment(assignment.id)}
-                      className="btn btn-small btn-danger"
-                    >
-                      Remove
-                    </button>
+                    <span>
+                      {assignment.has_departed && (
+                        <button
+                          onClick={() => handleUndepartAssignment(assignment.id)}
+                          className="btn btn-small btn-secondary"
+                          style={{ marginRight: '0.25rem' }}
+                        >
+                          Undo Departure
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemoveAssignment(assignment.id)}
+                        className="btn btn-small btn-danger"
+                      >
+                        Remove
+                      </button>
+                    </span>
                   </div>
                 ))
               )}

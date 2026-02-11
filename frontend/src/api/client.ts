@@ -370,6 +370,13 @@ class ApiClient {
     });
   }
 
+  async adminUndepartAssignment(rideId: number, assignmentId: number) {
+    return this.request<import('../types').RideAssignment>(
+      `/admin/rides/${rideId}/assignments/${assignmentId}/undepart/`,
+      { method: 'POST' }
+    );
+  }
+
   async adminGetDrivers() {
     return this.request<import('../types').User[]>('/admin/drivers/');
   }

@@ -648,6 +648,23 @@ class AdminRideViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    @action(detail=True, methods=['post'], url_path='assignments/(?P<assignment_id>[^/.]+)/undepart')
+    def undepart_assignment(self, request, pk=None, assignment_id=None):
+        """Unmark a driver as departed."""
+        ride = self.get_object()
+        try:
+            assignment = ride.assignments.get(id=assignment_id)
+        except RideAssignment.DoesNotExist:
+            return Response({'error': 'Assignment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not assignment.has_departed:
+            return Response({'error': 'Driver has not departed'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assignment.has_departed = False
+        assignment.departed_at = None
+        assignment.save(update_fields=['has_departed', 'departed_at'])
+        return Response(RideAssignmentSerializer(assignment).data)
+
     @action(detail=False, methods=['post'], url_path='import-csv', parser_classes=[MultiPartParser])
     def import_csv(self, request):
         """Import rides from a CSV file.
