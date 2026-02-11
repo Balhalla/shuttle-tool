@@ -183,7 +183,7 @@ export function RideDetail() {
           <p className="form-note">
             {user
               ? 'Your reservation will be confirmed immediately.'
-              : 'You will receive an email with a confirmation link. Your reservation will be held for 15 minutes.'}
+              : 'You will receive an email with a confirmation link. Your reservation will be held for 15 minutes. Your phone number is used for a driver to contact you in case of problems. All data will be removed 2 weeks after the festival.'}
           </p>
           <button type="submit" className="btn btn-primary" disabled={reserving}>
             {reserving ? 'Reserving...' : 'Reserve Seat'}
