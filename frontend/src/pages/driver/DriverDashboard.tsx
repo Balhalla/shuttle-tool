@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import type { Ride } from '../../types';
 
 export function DriverDashboard() {
@@ -8,6 +9,7 @@ export function DriverDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showPastRides, setShowPastRides] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     loadRides();
@@ -38,8 +40,14 @@ export function DriverDashboard() {
 
   const now = new Date();
   const cutoffTime = new Date(now.getTime() - 30 * 60 * 1000); // 30 minutes ago
-  const upcomingRides = rides.filter((ride) => new Date(ride.departure_time) >= cutoffTime);
-  const pastRides = rides.filter((ride) => new Date(ride.departure_time) < cutoffTime);
+
+  const hasDeparted = (ride: Ride) => {
+    const myAssignment = ride.assignments?.find((a) => a.driver.id === user?.id);
+    return myAssignment?.has_departed ?? false;
+  };
+
+  const upcomingRides = rides.filter((ride) => new Date(ride.departure_time) >= cutoffTime && !hasDeparted(ride));
+  const pastRides = rides.filter((ride) => new Date(ride.departure_time) < cutoffTime || hasDeparted(ride));
 
   // Sort upcoming rides by departure time (ascending)
   upcomingRides.sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime());
