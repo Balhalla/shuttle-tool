@@ -80,10 +80,10 @@ def public_ride_list(request):
     if date:
         rides = rides.filter(departure_time__date=date)
 
-    # Filter out rides where all drivers have left (unless still in future)
+    # Filter out rides where all drivers have left
     visible_rides = [
         ride for ride in rides
-        if ride.departure_time > now or not ride.all_departed
+        if not ride.all_departed
     ]
 
     serializer = RideListSerializer(visible_rides, many=True)
