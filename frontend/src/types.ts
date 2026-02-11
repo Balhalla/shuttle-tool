@@ -59,6 +59,7 @@ export interface Ride {
   reserved_seats: number;
   is_full: boolean;
   registration_open: boolean;
+  all_departed?: boolean;
   created_at: string;
 }
 
@@ -70,6 +71,7 @@ export interface Reservation {
   guest_name: string;
   status: 'pending' | 'confirmed' | 'cancelled';
   added_by_admin: boolean;
+  is_present: boolean;
   created_at: string;
   expires_at?: string;
 }

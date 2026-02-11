@@ -75,13 +75,14 @@ class RideListSerializer(serializers.ModelSerializer):
     seats_remaining = serializers.IntegerField(read_only=True)
     is_full = serializers.BooleanField(read_only=True)
     registration_open = serializers.BooleanField(read_only=True)
+    all_departed = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Ride
         fields = [
             'id', 'origin', 'destination', 'departure_time',
             'available_seats', 'seats_remaining', 'is_full',
-            'registration_open', 'is_vip'
+            'registration_open', 'is_vip', 'all_departed'
         ]
 
 
@@ -93,9 +94,9 @@ class ReservationSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = [
             'id', 'ride', 'user', 'guest_email', 'guest_name',
-            'status', 'added_by_admin', 'created_at', 'expires_at'
+            'status', 'added_by_admin', 'is_present', 'created_at', 'expires_at'
         ]
-        read_only_fields = ['id', 'status', 'created_at', 'expires_at']
+        read_only_fields = ['id', 'status', 'is_present', 'created_at', 'expires_at']
 
 
 class ReservationCreateSerializer(serializers.Serializer):

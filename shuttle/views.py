@@ -316,10 +316,9 @@ def my_reservations(request):
     reservations = Reservation.objects.filter(
         Q(user=request.user) | Q(guest_email=request.user.email),
         status='confirmed'
-    ).select_related('ride__origin', 'ride__destination').order_by('ride__departure_time')
-
-    # Only show upcoming rides
-    reservations = reservations.filter(ride__departure_time__gte=timezone.now())
+    ).select_related('ride__origin', 'ride__destination').prefetch_related(
+        'ride__assignments'
+    ).order_by('ride__departure_time')
 
     serializer = ReservationSerializer(reservations, many=True)
     return Response(serializer.data)
@@ -339,6 +338,9 @@ def cancel_my_reservation(request, reservation_id):
 
     if reservation.status == 'cancelled':
         return Response({'error': 'Reservation is already cancelled'}, status=400)
+
+    if reservation.ride.all_departed:
+        return Response({'error': 'This ride has already departed'}, status=400)
 
     reservation.cancel()
     return Response({'message': 'Reservation cancelled'})
