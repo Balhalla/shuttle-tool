@@ -11,6 +11,8 @@ export function AdminLocations() {
   const [form, setForm] = useState({
     name: '',
     description: '',
+    latitude: '',
+    longitude: '',
   });
 
   useEffect(() => {
@@ -32,11 +34,21 @@ export function AdminLocations() {
     e.preventDefault();
     setError('');
 
+    const roundCoord = (v: string) => {
+      const n = parseFloat(v);
+      return isNaN(n) ? null : String(Math.round(n * 1e6) / 1e6);
+    };
+    const payload = {
+      ...form,
+      latitude: form.latitude ? roundCoord(form.latitude) : null,
+      longitude: form.longitude ? roundCoord(form.longitude) : null,
+    };
+
     try {
       if (editingId) {
-        await api.adminUpdateLocation(editingId, form);
+        await api.adminUpdateLocation(editingId, payload);
       } else {
-        await api.adminCreateLocation(form);
+        await api.adminCreateLocation(payload);
       }
       loadLocations();
       resetForm();
@@ -49,6 +61,8 @@ export function AdminLocations() {
     setForm({
       name: location.name,
       description: location.description,
+      latitude: location.latitude || '',
+      longitude: location.longitude || '',
     });
     setEditingId(location.id);
     setShowForm(true);
@@ -66,7 +80,7 @@ export function AdminLocations() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', description: '' });
+    setForm({ name: '', description: '', latitude: '', longitude: '' });
     setEditingId(null);
     setShowForm(false);
   };
@@ -109,6 +123,43 @@ export function AdminLocations() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="latitude">Latitude</label>
+                  <input
+                    id="latitude"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 51.0486"
+                    value={form.latitude}
+                    onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="longitude">Longitude</label>
+                  <input
+                    id="longitude"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 3.7332"
+                    value={form.longitude}
+                    onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+                  />
+                </div>
+              </div>
+              {form.latitude && form.longitude && (
+                <div className="map-preview">
+                  <iframe
+                    title="Location preview"
+                    width="100%"
+                    height="200"
+                    style={{ border: 0, borderRadius: '8px' }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://maps.google.com/maps?q=${form.latitude},${form.longitude}&z=15&output=embed`}
+                  />
+                </div>
+              )}
               <div className="form-actions">
                 <button type="button" onClick={resetForm} className="btn btn-secondary">
                   Cancel
@@ -127,6 +178,7 @@ export function AdminLocations() {
           <tr>
             <th>Name</th>
             <th>Description</th>
+            <th>Coordinates</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -135,6 +187,20 @@ export function AdminLocations() {
             <tr key={location.id}>
               <td>{location.name}</td>
               <td>{location.description || '-'}</td>
+              <td>
+                {location.latitude && location.longitude ? (
+                  <a
+                    href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: '0.85rem' }}
+                  >
+                    {location.latitude}, {location.longitude}
+                  </a>
+                ) : (
+                  '-'
+                )}
+              </td>
               <td>
                 <button onClick={() => handleEdit(location)} className="btn btn-small">
                   Edit

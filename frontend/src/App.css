@@ -777,6 +777,29 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.location-nav-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.location-nav-link:hover {
+  color: #007bff;
+}
+
+.location-descriptions {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.map-preview {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .departure-time {
   color: #666;
   font-size: 1.1rem;

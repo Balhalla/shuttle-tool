@@ -143,8 +143,39 @@ export function DriverRideDetail() {
 
       <div className="ride-header">
         <h1>
-          {ride.origin.name} &rarr; {ride.destination.name}
+          <a
+            href={
+              ride.origin.latitude && ride.origin.longitude
+                ? `https://www.google.com/maps/dir/?api=1&destination=${ride.origin.latitude},${ride.origin.longitude}`
+                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ride.origin.name)}`
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className="location-nav-link"
+          >
+            {ride.origin.name}
+          </a>
+          {' '}&rarr;{' '}
+          <a
+            href={
+              ride.destination.latitude && ride.destination.longitude
+                ? `https://www.google.com/maps/dir/?api=1&destination=${ride.destination.latitude},${ride.destination.longitude}`
+                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ride.destination.name)}`
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className="location-nav-link"
+          >
+            {ride.destination.name}
+          </a>
         </h1>
+        {(ride.origin.description || ride.destination.description) && (
+          <p className="location-descriptions">
+            {ride.origin.description && <span>{ride.origin.name}: {ride.origin.description}</span>}
+            {ride.origin.description && ride.destination.description && <br />}
+            {ride.destination.description && <span>{ride.destination.name}: {ride.destination.description}</span>}
+          </p>
+        )}
         <p className="departure-time">{formatTime(ride.departure_time)}</p>
         {ride.is_vip && <span className="vip-badge">VIP Ride</span>}
         {hasDeparted && <span className="departed-badge">Departed</span>}

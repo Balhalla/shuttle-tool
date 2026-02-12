@@ -21,6 +21,8 @@ export interface Location {
   id: number;
   name: string;
   description: string;
+  latitude: string | null;
+  longitude: string | null;
   created_at: string;
 }
 

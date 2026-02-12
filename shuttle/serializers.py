@@ -14,7 +14,7 @@ class CarSerializer(serializers.ModelSerializer):
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ['id', 'name', 'description', 'created_at']
+        fields = ['id', 'name', 'description', 'latitude', 'longitude', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
