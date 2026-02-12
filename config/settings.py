@@ -7,6 +7,10 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# SECURITY WARNING: don't run with debug turned on in production!
+# Default to False for security - explicitly set to True for development
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() == 'true'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # In production, always set DJANGO_SECRET_KEY environment variable
 _secret_key = os.environ.get('DJANGO_SECRET_KEY', '')
@@ -26,10 +30,6 @@ if not _secret_key:
     )
     _secret_key = 'insecure-dev-key-only-for-local-development'
 SECRET_KEY = _secret_key
-
-# SECURITY WARNING: don't run with debug turned on in production!
-# Default to False for security - explicitly set to True for development
-DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
