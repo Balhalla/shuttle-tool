@@ -17,18 +17,12 @@ from .serializers import (
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@ratelimit(key='ip', rate='5/h', method='POST')
+@ratelimit(key='ip', rate='5/h', method='POST', block=True)
 def request_magic_link(request):
     """Request a magic link to be sent to email.
     
     Rate limited to 5 requests per hour per IP to prevent abuse.
     """
-    if getattr(request, 'limited', False):
-        return Response(
-            {'error': 'Too many requests. Please try again later.'},
-            status=status.HTTP_429_TOO_MANY_REQUESTS
-        )
-    
     serializer = RequestMagicLinkSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -60,18 +54,12 @@ def request_magic_link(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-@ratelimit(key='ip', rate='10/h', method='GET')
+@ratelimit(key='ip', rate='10/h', method='GET', block=True)
 def verify_token(request, token):
     """Verify a magic token and return user info with a session token.
     
     Rate limited to 10 requests per hour per IP to prevent brute force.
     """
-    if getattr(request, 'limited', False):
-        return Response(
-            {'error': 'Too many requests. Please try again later.'},
-            status=status.HTTP_429_TOO_MANY_REQUESTS
-        )
-    
     try:
         with transaction.atomic():
             # Use select_for_update to prevent race conditions

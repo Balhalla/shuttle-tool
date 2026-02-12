@@ -102,18 +102,12 @@ def public_ride_detail(request, ride_id):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@ratelimit(key='ip', rate='10/h', method='POST')
+@ratelimit(key='ip', rate='10/h', method='POST', block=True)
 def reserve_ride(request, ride_id):
     """Create a reservation. Auto-confirms for authenticated users, sends email for guests.
     
     Rate limited to 10 reservations per hour per IP to prevent abuse.
     """
-    if getattr(request, 'limited', False):
-        return Response(
-            {'error': 'Too many reservation requests. Please try again later.'},
-            status=status.HTTP_429_TOO_MANY_REQUESTS
-        )
-    
     ride = get_object_or_404(Ride, id=ride_id, is_vip=False)
 
     if ride.is_full:
