@@ -1043,3 +1043,59 @@ def admin_passenger_list(request):
         })
 
     return Response(list(passengers.values()))
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def admin_driver_timeline(request):
+    """Get driver availability and ride assignments for timeline view."""
+    drivers = User.objects.filter(Q(role='driver') | Q(role='admin')).order_by('name')
+
+    # Optional date range filters
+    start = request.query_params.get('start')
+    end = request.query_params.get('end')
+
+    result = []
+    for driver in drivers:
+        availabilities = DriverAvailability.objects.filter(driver=driver)
+        assignments = RideAssignment.objects.filter(driver=driver).select_related(
+            'ride__origin', 'ride__destination', 'car'
+        )
+
+        if start:
+            availabilities = availabilities.filter(end_time__gte=start)
+            assignments = assignments.filter(ride__departure_time__gte=start)
+        if end:
+            availabilities = availabilities.filter(start_time__lte=end)
+            assignments = assignments.filter(ride__departure_time__lte=end)
+
+        result.append({
+            'driver': {
+                'id': driver.id,
+                'name': driver.name,
+                'email': driver.email,
+            },
+            'availabilities': [
+                {
+                    'id': a.id,
+                    'start_time': a.start_time.isoformat(),
+                    'end_time': a.end_time.isoformat(),
+                }
+                for a in availabilities
+            ],
+            'assignments': [
+                {
+                    'id': a.id,
+                    'ride_id': a.ride.id,
+                    'origin': a.ride.origin.name,
+                    'destination': a.ride.destination.name,
+                    'departure_time': a.ride.departure_time.isoformat(),
+                    'is_vip': a.ride.is_vip,
+                    'car_name': a.car.name,
+                    'has_departed': a.has_departed,
+                }
+                for a in assignments
+            ],
+        })
+
+    return Response(result)

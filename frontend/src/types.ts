@@ -150,3 +150,30 @@ export interface PassengerOverview {
   phone: string;
   rides: PassengerRide[];
 }
+
+export interface TimelineAvailability {
+  id: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface TimelineAssignment {
+  id: number;
+  ride_id: number;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  is_vip: boolean;
+  car_name: string;
+  has_departed: boolean;
+}
+
+export interface DriverTimeline {
+  driver: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  availabilities: TimelineAvailability[];
+  assignments: TimelineAssignment[];
+}

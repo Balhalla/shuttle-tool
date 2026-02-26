@@ -440,6 +440,16 @@ class ApiClient {
     return this.request<import('../types').PassengerOverview[]>('/admin/passengers/');
   }
 
+  async adminGetDriverTimeline(params?: { start?: string; end?: string }) {
+    const query = new URLSearchParams();
+    if (params?.start) query.append('start', params.start);
+    if (params?.end) query.append('end', params.end);
+    const queryStr = query.toString();
+    return this.request<import('../types').DriverTimeline[]>(
+      `/admin/driver-timeline/${queryStr ? `?${queryStr}` : ''}`
+    );
+  }
+
   async adminConfirmReservation(id: number) {
     return this.request<import('../types').Reservation>(`/admin/reservations/${id}/confirm/`, {
       method: 'POST',

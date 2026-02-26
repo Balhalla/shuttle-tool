@@ -789,6 +789,107 @@ body {
   gap: 0.25rem;
 }
 
+/* Driver Availability Timeline */
+.timeline-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.timeline-container {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.timeline-row,
+.timeline-axis {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #eee;
+  min-height: 40px;
+}
+
+.timeline-axis {
+  min-height: 30px;
+  background: #f8f9fa;
+}
+
+.timeline-label {
+  width: 140px;
+  min-width: 140px;
+  padding: 0.5rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+  border-right: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+}
+
+.timeline-track {
+  flex: 1;
+  position: relative;
+  min-height: 36px;
+  min-width: 600px;
+}
+
+.timeline-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed #ccc;
+}
+
+.marker-label {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 0.7rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+.timeline-block {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 4px;
+}
+
+.timeline-block.availability {
+  background-color: #b8d4f0;
+  opacity: 0.6;
+}
+
+.timeline-block.assignment {
+  background-color: #2b6cb0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.timeline-block.assignment:hover {
+  background-color: #1a4d80;
+}
+
+.timeline-block.assignment.vip {
+  background-color: #d4a017;
+  border: 2px solid #b8860b;
+}
+
+.timeline-block.assignment.vip:hover {
+  background-color: #b8860b;
+}
+
+.timeline-legend {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
 /* Page header */
 .page-header {
   display: flex;
