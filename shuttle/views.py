@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.db import transaction
 
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation
+from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, SiteSettings
 from .serializers import (
     CarSerializer, LocationSerializer, TravelTimeSerializer, RideSerializer, RideListSerializer,
     RideAssignmentSerializer, ReservationSerializer, ReservationCreateSerializer,
@@ -42,6 +42,10 @@ def app_config(request):
         data['favicon_url'] = settings.FAVICON_URL
     if settings.DEMO_SITE:
         data['demo_site'] = True
+    site = SiteSettings.get()
+    if site.banner_enabled and site.banner_text:
+        data['banner_enabled'] = True
+        data['banner_text'] = site.banner_text
     return Response(data)
 
 
@@ -1099,3 +1103,25 @@ def admin_driver_timeline(request):
         })
 
     return Response(result)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAdmin])
+def admin_site_settings(request):
+    """Get or update site-wide settings."""
+    site = SiteSettings.get()
+    if request.method == 'GET':
+        return Response({
+            'banner_enabled': site.banner_enabled,
+            'banner_text': site.banner_text,
+        })
+    # PATCH
+    if 'banner_enabled' in request.data:
+        site.banner_enabled = bool(request.data['banner_enabled'])
+    if 'banner_text' in request.data:
+        site.banner_text = request.data['banner_text']
+    site.save()
+    return Response({
+        'banner_enabled': site.banner_enabled,
+        'banner_text': site.banner_text,
+    })

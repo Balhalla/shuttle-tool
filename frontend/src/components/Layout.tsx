@@ -55,6 +55,9 @@ export function Layout() {
           <a href="mailto:shuttle@balhallafestival.be">shuttle@balhallafestival.be</a>
         </div>
       )}
+      {config?.banner_enabled && config?.banner_text && (
+        <div className="site-banner">{config.banner_text}</div>
+      )}
       <main className="main">
         <Outlet />
       </main>

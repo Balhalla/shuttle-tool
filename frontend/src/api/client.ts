@@ -4,6 +4,8 @@ export interface AppConfig {
   title: string;
   favicon_url?: string;
   demo_site?: boolean;
+  banner_enabled?: boolean;
+  banner_text?: string;
 }
 
 class ApiClient {
@@ -448,6 +450,17 @@ class ApiClient {
     return this.request<import('../types').DriverTimeline[]>(
       `/admin/driver-timeline/${queryStr ? `?${queryStr}` : ''}`
     );
+  }
+
+  async adminGetSiteSettings() {
+    return this.request<{ banner_enabled: boolean; banner_text: string }>('/admin/settings/');
+  }
+
+  async adminUpdateSiteSettings(data: { banner_enabled?: boolean; banner_text?: string }) {
+    return this.request<{ banner_enabled: boolean; banner_text: string }>('/admin/settings/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
   async adminConfirmReservation(id: number) {

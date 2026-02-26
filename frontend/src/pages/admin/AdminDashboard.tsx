@@ -113,6 +113,7 @@ export function AdminDashboard() {
           <Link to="/admin/reservations" className="btn btn-primary">View Reservations</Link>
           <Link to="/admin/passengers" className="btn btn-primary">Passenger Overview</Link>
           <Link to="/admin/users" className="btn btn-primary">Manage Users</Link>
+          <Link to="/admin/settings" className="btn btn-secondary">Site Settings</Link>
         </div>
       </div>
     </div>

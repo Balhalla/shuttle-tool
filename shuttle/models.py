@@ -257,3 +257,20 @@ class Reservation(models.Model):
         """Cancel the reservation."""
         self.status = 'cancelled'
         self.save()
+
+
+class SiteSettings(models.Model):
+    """Singleton model for site-wide settings."""
+    banner_enabled = models.BooleanField(default=False)
+    banner_text = models.TextField(blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Site Settings'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return 'Site Settings'
