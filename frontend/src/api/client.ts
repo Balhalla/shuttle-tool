@@ -353,6 +353,13 @@ class ApiClient {
     });
   }
 
+  async adminEditPassenger(rideId: number, reservationId: number, data: { name?: string; email?: string; phone?: string }) {
+    return this.request<import('../types').Passenger>(`/admin/rides/${rideId}/passengers/${reservationId}/edit/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   async adminGetRideAssignments(rideId: number) {
     return this.request<import('../types').RideAssignment[]>(`/admin/rides/${rideId}/assignments/`);
   }

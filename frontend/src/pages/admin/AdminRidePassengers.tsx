@@ -12,6 +12,7 @@ export function AdminRidePassengers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -46,17 +47,36 @@ export function AdminRidePassengers() {
     setError('');
 
     try {
-      await api.adminAddPassenger(parseInt(rideId), {
-        name: form.name,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-      });
+      if (editingPassenger) {
+        await api.adminEditPassenger(parseInt(rideId), editingPassenger.id, {
+          name: form.name,
+          email: form.email || undefined,
+          phone: form.phone || undefined,
+        });
+      } else {
+        await api.adminAddPassenger(parseInt(rideId), {
+          name: form.name,
+          email: form.email || undefined,
+          phone: form.phone || undefined,
+        });
+      }
       setForm({ name: '', email: '', phone: '' });
       setShowForm(false);
+      setEditingPassenger(null);
       loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add passenger');
+      setError(err instanceof Error ? err.message : 'Failed to save passenger');
     }
+  };
+
+  const handleEditPassenger = (passenger: Passenger) => {
+    setForm({
+      name: passenger.name,
+      email: passenger.email || '',
+      phone: passenger.phone || '',
+    });
+    setEditingPassenger(passenger);
+    setShowForm(true);
   };
 
   const handleRemovePassenger = async (reservationId: number) => {
@@ -161,7 +181,7 @@ export function AdminRidePassengers() {
       {showForm && (
         <div className="modal-overlay">
           <div className="modal">
-            <h2>Add Passenger</h2>
+            <h2>{editingPassenger ? 'Edit Passenger' : 'Add Passenger'}</h2>
             <form onSubmit={handleAddPassenger}>
               <div className="form-group">
                 <label htmlFor="name">Name *</label>
@@ -192,14 +212,17 @@ export function AdminRidePassengers() {
                   onChange={(value) => setForm({ ...form, phone: value })}
                 />
               </div>
-              <p className="form-note">
-                Passengers added by admin are automatically confirmed and do not need to confirm via email.
-              </p>
+              {!editingPassenger && (
+                <p className="form-note">
+                  Passengers added by admin are automatically confirmed and do not need to confirm via email.
+                </p>
+              )}
               <div className="form-actions">
                 <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
+                    setEditingPassenger(null);
                     setForm({ name: '', email: '', phone: '' });
                   }}
                   className="btn btn-secondary"
@@ -207,7 +230,7 @@ export function AdminRidePassengers() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Add Passenger
+                  {editingPassenger ? 'Save' : 'Add Passenger'}
                 </button>
               </div>
             </form>
@@ -250,6 +273,12 @@ export function AdminRidePassengers() {
                   )}
                 </td>
                 <td>
+                  <button
+                    onClick={() => handleEditPassenger(passenger)}
+                    className="btn btn-small"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => handleRemovePassenger(passenger.id)}
                     className="btn btn-small btn-danger"

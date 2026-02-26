@@ -612,6 +612,74 @@ class AdminRideViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    @action(detail=True, methods=['patch'], url_path='passengers/(?P<reservation_id>[^/.]+)/edit')
+    def edit_passenger(self, request, pk=None, reservation_id=None):
+        """Edit passenger information."""
+        ride = self.get_object()
+        try:
+            reservation = ride.reservations.get(id=reservation_id)
+        except Reservation.DoesNotExist:
+            return Response(
+                {'error': 'Passenger not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        name = request.data.get('name')
+        email = request.data.get('email')
+        phone = request.data.get('phone')
+
+        effective_name = name if name is not None else (reservation.user.name if reservation.user else reservation.guest_name)
+        effective_phone = phone if phone is not None else (reservation.user.phone if reservation.user else reservation.guest_phone)
+
+        if reservation.user:
+            if email is not None and email != reservation.user.email:
+                if email:
+                    # Email changed — check if another account already has this address
+                    existing = User.objects.filter(email=email).exclude(id=reservation.user.id).first()
+                    if existing:
+                        # Re-link the reservation to the existing account
+                        reservation.user = existing
+                    else:
+                        reservation.user.email = email
+                        reservation.user.save()
+                else:
+                    # Email cleared — detach the user from this reservation (becomes guest-only)
+                    reservation.user = None
+            if reservation.user:
+                if name is not None:
+                    reservation.user.name = name
+                if phone is not None:
+                    reservation.user.phone = phone
+                reservation.user.save()
+        elif email:
+            # Guest with no user — get or create a user account for this email
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={'name': effective_name, 'phone': effective_phone or '', 'role': 'public'}
+            )
+            if not created:
+                updated = []
+                if name is not None and user.name != name:
+                    user.name = name
+                    updated.append('name')
+                if phone is not None and user.phone != phone:
+                    user.phone = phone
+                    updated.append('phone')
+                if updated:
+                    user.save(update_fields=updated)
+            reservation.user = user
+
+        # Always sync guest fields
+        if name is not None:
+            reservation.guest_name = name
+        if email is not None:
+            reservation.guest_email = email
+        if phone is not None:
+            reservation.guest_phone = phone
+        reservation.save()
+
+        return Response(PassengerSerializer(reservation).data)
+
     @action(detail=True, methods=['get', 'post'])
     def assignments(self, request, pk=None):
         """Get or add driver+car assignments for a ride."""
