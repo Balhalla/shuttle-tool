@@ -612,6 +612,42 @@ class AdminRideViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    @action(detail=True, methods=['patch'], url_path='passengers/(?P<reservation_id>[^/.]+)/edit')
+    def edit_passenger(self, request, pk=None, reservation_id=None):
+        """Edit passenger information."""
+        ride = self.get_object()
+        try:
+            reservation = ride.reservations.get(id=reservation_id)
+        except Reservation.DoesNotExist:
+            return Response(
+                {'error': 'Passenger not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        name = request.data.get('name')
+        email = request.data.get('email')
+        phone = request.data.get('phone')
+
+        if reservation.user:
+            # Update the linked user account
+            if name is not None:
+                reservation.user.name = name
+            if email is not None:
+                reservation.user.email = email
+            if phone is not None:
+                reservation.user.phone = phone
+            reservation.user.save()
+        # Always update guest fields too
+        if name is not None:
+            reservation.guest_name = name
+        if email is not None:
+            reservation.guest_email = email
+        if phone is not None:
+            reservation.guest_phone = phone
+        reservation.save()
+
+        return Response(PassengerSerializer(reservation).data)
+
     @action(detail=True, methods=['get', 'post'])
     def assignments(self, request, pk=None):
         """Get or add driver+car assignments for a ride."""
