@@ -124,6 +124,28 @@ export function AdminRidePassengers() {
         </div>
       </div>
 
+      {ride.assignments && ride.assignments.length > 0 && (
+        <div className="driver-details-section">
+          <h2>Drivers</h2>
+          <div className="driver-cards">
+            {ride.assignments.map((assignment) => (
+              <div key={assignment.id} className="driver-card">
+                <div className="driver-card-name">{assignment.driver.name}</div>
+                <div className="driver-card-info">
+                  <span>{assignment.car.name} ({assignment.car.capacity} seats)</span>
+                  {assignment.driver.phone && (
+                    <span><PhoneLink phone={assignment.driver.phone} className="phone-link" /></span>
+                  )}
+                </div>
+                {assignment.has_departed && (
+                  <span className="departed-badge">Departed</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <div className="error">{error}</div>}
 
       <div className="page-header">
