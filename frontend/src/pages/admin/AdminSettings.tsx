@@ -1,19 +1,24 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { useConfig } from '../../context/ConfigContext';
 
 export function AdminSettings() {
+  const { refreshConfig } = useConfig();
   const [bannerEnabled, setBannerEnabled] = useState(false);
   const [bannerText, setBannerText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    api.adminGetSiteSettings().then((data) => {
-      setBannerEnabled(data.banner_enabled);
-      setBannerText(data.banner_text);
-      setLoading(false);
-    });
+    api.adminGetSiteSettings()
+      .then((data) => {
+        setBannerEnabled(data.banner_enabled);
+        setBannerText(data.banner_text);
+      })
+      .catch(() => setError('Failed to load settings.'))
+      .finally(() => setLoading(false));
   }, []);
 
   const handleSave = async () => {
@@ -27,6 +32,7 @@ export function AdminSettings() {
       setBannerEnabled(data.banner_enabled);
       setBannerText(data.banner_text);
       setMessage('Settings saved.');
+      refreshConfig();
     } catch {
       setMessage('Failed to save settings.');
     } finally {
@@ -35,6 +41,7 @@ export function AdminSettings() {
   };
 
   if (loading) return <div className="loading">Loading settings...</div>;
+  if (error) return <div className="error">{error}</div>;
 
   return (
     <div className="admin-settings">
@@ -42,7 +49,7 @@ export function AdminSettings() {
         <h1>Site Settings</h1>
       </div>
 
-      <div className="card" style={{ maxWidth: '600px' }}>
+      <div style={{ maxWidth: '600px' }}>
         <h2>Banner</h2>
         <div className="form-group">
           <label>
