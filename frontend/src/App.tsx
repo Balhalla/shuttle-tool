@@ -21,6 +21,7 @@ import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminTravelTimes } from './pages/admin/AdminTravelTimes';
 import { AdminDriverAvailability } from './pages/admin/AdminDriverAvailability';
 import { AdminPassengers } from './pages/admin/AdminPassengers';
+import { AdminDriverTimeline } from './pages/admin/AdminDriverTimeline';
 import './App.css';
 
 function ProtectedRoute({
@@ -168,6 +169,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminPassengers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/driver-timeline"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminDriverTimeline />
             </ProtectedRoute>
           }
         />
