@@ -1004,8 +1004,6 @@ class AdminReservationViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 @permission_classes([IsAdmin])
-@api_view(['GET'])
-@permission_classes([IsAdmin])
 def admin_passenger_list(request):
     """List all unique passengers across all rides."""
     reservations = Reservation.objects.exclude(
