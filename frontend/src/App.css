@@ -456,6 +456,35 @@ body {
   color: #666;
 }
 
+/* Ride Filters */
+.ride-filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.ride-filters .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ride-filters .filter-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.ride-filters .filter-group select,
+.ride-filters .filter-group input {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
 /* Cards */
 .ride-card {
   background: white;
