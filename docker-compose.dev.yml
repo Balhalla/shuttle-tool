@@ -25,6 +25,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./manage.py:/app/manage.py
       - ./config:/app/config
@@ -59,14 +61,6 @@ services:
     networks:
       - backend
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-
-  mailpit:
-    image: axllent/mailpit
-    ports:
-      - "8025:8025"
-      - "1025:1025"
-    networks:
-      - backend
 
 volumes:
   mysql_data_dev:
