@@ -5,7 +5,8 @@ import type { Ride, Location } from '../types';
 
 export function Home() {
   const [rides, setRides] = useState<Ride[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [availableOrigins, setAvailableOrigins] = useState<Location[]>([]);
+  const [availableDestinations, setAvailableDestinations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [originFilter, setOriginFilter] = useState('');
@@ -13,7 +14,17 @@ export function Home() {
   const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
-    api.getLocations().then(setLocations).catch(() => {});
+    // Load unfiltered rides once to derive available filter options
+    api.getPublicRides().then((allRides) => {
+      const originsMap = new Map<number, Location>();
+      const destinationsMap = new Map<number, Location>();
+      allRides.forEach((r) => {
+        originsMap.set(r.origin.id, r.origin);
+        destinationsMap.set(r.destination.id, r.destination);
+      });
+      setAvailableOrigins([...originsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      setAvailableDestinations([...destinationsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+    }).catch(() => {});
     loadRides();
   }, []);
 
@@ -67,7 +78,7 @@ export function Home() {
             onChange={(e) => setOriginFilter(e.target.value)}
           >
             <option value="">All origins</option>
-            {locations.map((loc) => (
+            {availableOrigins.map((loc) => (
               <option key={loc.id} value={loc.id}>{loc.name}</option>
             ))}
           </select>
@@ -80,7 +91,7 @@ export function Home() {
             onChange={(e) => setDestinationFilter(e.target.value)}
           >
             <option value="">All destinations</option>
-            {locations.map((loc) => (
+            {availableDestinations.map((loc) => (
               <option key={loc.id} value={loc.id}>{loc.name}</option>
             ))}
           </select>
