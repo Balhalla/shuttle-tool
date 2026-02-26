@@ -720,6 +720,10 @@ body {
   background-color: #ffe4b3;
 }
 
+.data-table tr.ride-no-driver {
+  background-color: #e2d6f3;
+}
+
 /* Page header */
 .page-header {
   display: flex;
