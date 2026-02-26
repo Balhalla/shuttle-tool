@@ -628,16 +628,48 @@ class AdminRideViewSet(viewsets.ModelViewSet):
         email = request.data.get('email')
         phone = request.data.get('phone')
 
+        effective_name = name if name is not None else (reservation.user.name if reservation.user else reservation.guest_name)
+        effective_phone = phone if phone is not None else (reservation.user.phone if reservation.user else reservation.guest_phone)
+
         if reservation.user:
-            # Update the linked user account
-            if name is not None:
-                reservation.user.name = name
-            if email is not None:
-                reservation.user.email = email
-            if phone is not None:
-                reservation.user.phone = phone
-            reservation.user.save()
-        # Always update guest fields too
+            if email is not None and email != reservation.user.email:
+                if email:
+                    # Email changed — check if another account already has this address
+                    existing = User.objects.filter(email=email).exclude(id=reservation.user.id).first()
+                    if existing:
+                        # Re-link the reservation to the existing account
+                        reservation.user = existing
+                    else:
+                        reservation.user.email = email
+                        reservation.user.save()
+                else:
+                    # Email cleared — detach the user from this reservation (becomes guest-only)
+                    reservation.user = None
+            if reservation.user:
+                if name is not None:
+                    reservation.user.name = name
+                if phone is not None:
+                    reservation.user.phone = phone
+                reservation.user.save()
+        elif email:
+            # Guest with no user — get or create a user account for this email
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={'name': effective_name, 'phone': effective_phone or '', 'role': 'public'}
+            )
+            if not created:
+                updated = []
+                if name is not None and user.name != name:
+                    user.name = name
+                    updated.append('name')
+                if phone is not None and user.phone != phone:
+                    user.phone = phone
+                    updated.append('phone')
+                if updated:
+                    user.save(update_fields=updated)
+            reservation.user = user
+
+        # Always sync guest fields
         if name is not None:
             reservation.guest_name = name
         if email is not None:
