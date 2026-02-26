@@ -36,5 +36,6 @@ urlpatterns = [
     path('driver/rides/<int:ride_id>/depart/', views.driver_depart, name='driver_depart'),
 
     # Admin endpoints (router)
+    path('admin/passengers/', views.admin_passenger_list, name='admin_passenger_list'),
     path('', include(router.urls)),
 ]

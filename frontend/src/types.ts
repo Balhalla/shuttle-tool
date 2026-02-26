@@ -132,3 +132,21 @@ export interface CsvImportError {
   row_errors?: CsvImportRowError[];
   group_errors?: string[];
 }
+
+export interface PassengerRide {
+  reservation_id: number;
+  ride_id: number;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  status: string;
+  is_vip: boolean;
+}
+
+export interface PassengerOverview {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+  rides: PassengerRide[];
+}
