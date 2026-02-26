@@ -3,7 +3,7 @@ import csv
 import io
 import secrets
 from collections import defaultdict
-from datetime import timedelta
+from datetime import timedelta, datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -78,7 +78,14 @@ def public_ride_list(request):
     if destination_id:
         rides = rides.filter(destination_id=destination_id)
     if date:
-        rides = rides.filter(departure_time__date=date)
+        # Parse the date and build a timezone-aware range:
+        # from midnight on the selected date to 04:00 the following day
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+        day_start = timezone.make_aware(datetime.combine(date_obj, datetime.min.time()))
+        day_end = timezone.make_aware(
+            datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
+        ) + timedelta(hours=4)
+        rides = rides.filter(departure_time__gte=day_start, departure_time__lt=day_end)
 
     # Filter out rides where all drivers have left
     visible_rides = [

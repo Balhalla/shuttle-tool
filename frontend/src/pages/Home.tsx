@@ -1,20 +1,44 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import type { Ride } from '../types';
+import type { Ride, Location } from '../types';
 
 export function Home() {
   const [rides, setRides] = useState<Ride[]>([]);
+  const [availableOrigins, setAvailableOrigins] = useState<Location[]>([]);
+  const [availableDestinations, setAvailableDestinations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [originFilter, setOriginFilter] = useState('');
+  const [destinationFilter, setDestinationFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
+    // Load unfiltered rides once to derive available filter options
+    api.getPublicRides().then((allRides) => {
+      const originsMap = new Map<number, Location>();
+      const destinationsMap = new Map<number, Location>();
+      allRides.forEach((r) => {
+        originsMap.set(r.origin.id, r.origin);
+        destinationsMap.set(r.destination.id, r.destination);
+      });
+      setAvailableOrigins([...originsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      setAvailableDestinations([...destinationsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+    }).catch(() => {});
     loadRides();
   }, []);
 
+  useEffect(() => {
+    loadRides();
+  }, [originFilter, destinationFilter, dateFilter]);
+
   const loadRides = async () => {
     try {
-      const ridesData = await api.getPublicRides();
+      const params: { origin?: number; destination?: number; date?: string } = {};
+      if (originFilter) params.origin = parseInt(originFilter);
+      if (destinationFilter) params.destination = parseInt(destinationFilter);
+      if (dateFilter) params.date = dateFilter;
+      const ridesData = await api.getPublicRides(params);
       setRides(ridesData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load rides');
@@ -44,6 +68,52 @@ export function Home() {
       <h1>Available Shuttle Rides</h1>
 
       {error && <div className="error">{error}</div>}
+
+      <div className="ride-filters">
+        <div className="filter-group">
+          <label htmlFor="origin-filter">From</label>
+          <select
+            id="origin-filter"
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value)}
+          >
+            <option value="">All origins</option>
+            {availableOrigins.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-group">
+          <label htmlFor="destination-filter">To</label>
+          <select
+            id="destination-filter"
+            value={destinationFilter}
+            onChange={(e) => setDestinationFilter(e.target.value)}
+          >
+            <option value="">All destinations</option>
+            {availableDestinations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-group">
+          <label htmlFor="date-filter">Date</label>
+          <input
+            id="date-filter"
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+          />
+        </div>
+        {(originFilter || destinationFilter || dateFilter) && (
+          <button
+            className="btn btn-secondary btn-small"
+            onClick={() => { setOriginFilter(''); setDestinationFilter(''); setDateFilter(''); }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
       <div className="ride-list">
         {rides.length === 0 ? (
