@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { DriverAvailability, User } from '../../types';
 
@@ -128,9 +129,12 @@ export function AdminDriverAvailability() {
     <div className="admin-driver-availability">
       <div className="page-header">
         <h1>Driver Availability</h1>
-        <button onClick={() => setShowForm(true)} className="btn btn-primary">
-          Add Availability
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <Link to="/admin/driver-timeline" className="btn btn-secondary">View Timeline</Link>
+          <button onClick={() => setShowForm(true)} className="btn btn-primary">
+            Add Availability
+          </button>
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}
