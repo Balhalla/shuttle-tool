@@ -389,12 +389,17 @@ export function AdminRides() {
     return ride.reserved_seats > ride.available_seats;
   };
 
+  const hasNoDrivers = (ride: Ride) => {
+    return !ride.assignments || ride.assignments.length === 0;
+  };
+
   const getRowClass = (ride: Ride) => {
     if (isOverbooked(ride)) return 'ride-overbooked';
     if (hasRideConflict(ride)) return 'ride-conflict';
     const status = getDepartureStatus(ride);
     if (status === 'all') return 'ride-departed-all';
     if (status === 'partial') return 'ride-departed-partial';
+    if (hasNoDrivers(ride)) return 'ride-no-driver';
     return '';
   };
 
@@ -530,6 +535,7 @@ export function AdminRides() {
         <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#fff3cd' }} /> Partially departed</span>
         <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#f8d7da' }} /> Overbooked</span>
         <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#ffe4b3' }} /> Driver conflict</span>
+        <span className="legend-item"><span className="legend-swatch" style={{ backgroundColor: '#e2d6f3' }} /> No drivers assigned</span>
       </div>
 
       {showForm && (
