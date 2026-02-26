@@ -1000,3 +1000,46 @@ class AdminReservationViewSet(viewsets.ModelViewSet):
         reservation = self.get_object()
         reservation.cancel()
         return Response(ReservationSerializer(reservation).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def admin_passenger_list(request):
+    """List all unique passengers across all rides."""
+    reservations = Reservation.objects.exclude(
+        status='cancelled'
+    ).select_related('ride__origin', 'ride__destination', 'user')
+
+    # Group by person (user_id or guest_email)
+    passengers = {}
+    for res in reservations:
+        if res.user:
+            key = f'user_{res.user.id}'
+            name = res.user.name
+            email = res.user.email
+            phone = res.user.phone or ''
+        else:
+            key = f'guest_{res.guest_email or res.guest_name}'
+            name = res.guest_name
+            email = res.guest_email
+            phone = res.guest_phone
+
+        if key not in passengers:
+            passengers[key] = {
+                'key': key,
+                'name': name,
+                'email': email,
+                'phone': phone,
+                'rides': [],
+            }
+        passengers[key]['rides'].append({
+            'reservation_id': res.id,
+            'ride_id': res.ride.id,
+            'origin': res.ride.origin.name,
+            'destination': res.ride.destination.name,
+            'departure_time': res.ride.departure_time.isoformat(),
+            'status': res.status,
+            'is_vip': res.ride.is_vip,
+        })
+
+    return Response(list(passengers.values()))

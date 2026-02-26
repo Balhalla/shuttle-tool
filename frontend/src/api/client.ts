@@ -436,6 +436,10 @@ class ApiClient {
     return this.request<import('../types').Reservation[]>('/admin/reservations/');
   }
 
+  async adminGetPassengers() {
+    return this.request<import('../types').PassengerOverview[]>('/admin/passengers/');
+  }
+
   async adminConfirmReservation(id: number) {
     return this.request<import('../types').Reservation>(`/admin/reservations/${id}/confirm/`, {
       method: 'POST',

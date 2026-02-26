@@ -20,6 +20,7 @@ import { AdminReservations } from './pages/admin/AdminReservations';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminTravelTimes } from './pages/admin/AdminTravelTimes';
 import { AdminDriverAvailability } from './pages/admin/AdminDriverAvailability';
+import { AdminPassengers } from './pages/admin/AdminPassengers';
 import './App.css';
 
 function ProtectedRoute({
@@ -159,6 +160,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminDriverAvailability />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/passengers"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminPassengers />
             </ProtectedRoute>
           }
         />

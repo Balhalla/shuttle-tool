@@ -10,11 +10,12 @@ interface Stats {
   travelTimes: number;
   driverAvailabilities: number;
   reservations: number;
+  passengers: number;
   users: number;
 }
 
 export function AdminDashboard() {
-  const [stats, setStats] = useState<Stats>({ rides: 0, drivers: 0, cars: 0, locations: 0, travelTimes: 0, driverAvailabilities: 0, reservations: 0, users: 0 });
+  const [stats, setStats] = useState<Stats>({ rides: 0, drivers: 0, cars: 0, locations: 0, travelTimes: 0, driverAvailabilities: 0, reservations: 0, passengers: 0, users: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      const [rides, drivers, cars, locations, travelTimes, driverAvailabilities, reservations, users] = await Promise.all([
+      const [rides, drivers, cars, locations, travelTimes, driverAvailabilities, reservations, passengers, users] = await Promise.all([
         api.adminGetRides(),
         api.adminGetDrivers(),
         api.adminGetCars(),
@@ -31,6 +32,7 @@ export function AdminDashboard() {
         api.adminGetTravelTimes(),
         api.adminGetDriverAvailabilities(),
         api.adminGetReservations(),
+        api.adminGetPassengers(),
         api.adminGetUsers(),
       ]);
       setStats({
@@ -41,6 +43,7 @@ export function AdminDashboard() {
         travelTimes: travelTimes.length,
         driverAvailabilities: driverAvailabilities.length,
         reservations: reservations.length,
+        passengers: passengers.length,
         users: users.length,
       });
     } catch {
@@ -87,6 +90,10 @@ export function AdminDashboard() {
           <span className="stat-value">{stats.reservations}</span>
           <span className="stat-label">Reservations</span>
         </Link>
+        <Link to="/admin/passengers" className="stat-card">
+          <span className="stat-value">{stats.passengers}</span>
+          <span className="stat-label">Passengers</span>
+        </Link>
         <Link to="/admin/users" className="stat-card">
           <span className="stat-value">{stats.users}</span>
           <span className="stat-label">Users</span>
@@ -103,6 +110,7 @@ export function AdminDashboard() {
           <Link to="/admin/travel-times" className="btn btn-primary">Travel Times</Link>
           <Link to="/admin/driver-availability" className="btn btn-primary">Driver Availability</Link>
           <Link to="/admin/reservations" className="btn btn-primary">View Reservations</Link>
+          <Link to="/admin/passengers" className="btn btn-primary">Passenger Overview</Link>
           <Link to="/admin/users" className="btn btn-primary">Manage Users</Link>
         </div>
       </div>
