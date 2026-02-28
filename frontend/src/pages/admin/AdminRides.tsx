@@ -203,9 +203,21 @@ export function AdminRides() {
     return tt ? tt.minutes : null;
   };
 
+  // Returns true if a driver departing firstOrigin→firstDest at firstTime
+  // cannot reach secondOrigin in time for secondTime.
+  const ridesConflict = (
+    firstTime: number, firstOriginId: number, firstDestId: number,
+    secondTime: number, secondOriginId: number,
+  ): boolean => {
+    const rideDuration = getTravelTime(firstOriginId, firstDestId);
+    if (rideDuration === null) return false;
+    const travelToNext = getTravelTime(firstDestId, secondOriginId);
+    const repositioning = travelToNext !== null ? travelToNext * 60 * 1000 : 0;
+    return firstTime + rideDuration * 60 * 1000 + repositioning > secondTime;
+  };
+
   // Check if a driver has a travel time conflict for a specific ride
   const hasDriverConflict = (driverId: number, rideToCheck: Ride): boolean => {
-    // Get all rides assigned to this driver
     const driverRides = rides.filter((r) =>
       r.assignments?.some((a) => a.driver.id === driverId)
     );
@@ -219,31 +231,12 @@ export function AdminRides() {
 
       const otherTime = new Date(otherRide.departure_time).getTime();
 
-      // Check if the rides are close enough in time to potentially conflict
-      // Driver needs to: complete the first ride, then travel to the next ride's origin
-
       if (otherTime < rideTime) {
-        // Other ride is before this ride
-        // Driver departs otherRide at otherTime, arrives at destination after ride duration
-        const rideDuration = getTravelTime(otherRide.origin.id, otherRide.destination.id);
-        const travelToNext = getTravelTime(otherRide.destination.id, rideToCheck.origin.id);
-        if (rideDuration !== null && travelToNext !== null) {
-          const arrivalTime = otherTime + (rideDuration + travelToNext) * 60 * 1000;
-          if (arrivalTime > rideTime) {
-            return true; // Conflict: driver can't make it in time
-          }
-        }
+        if (ridesConflict(otherTime, otherRide.origin.id, otherRide.destination.id, rideTime, rideToCheck.origin.id))
+          return true;
       } else {
-        // This ride is before other ride
-        // Driver departs rideToCheck at rideTime, arrives at destination after ride duration
-        const rideDuration = getTravelTime(rideToCheck.origin.id, rideToCheck.destination.id);
-        const travelToNext = getTravelTime(rideToCheck.destination.id, otherRide.origin.id);
-        if (rideDuration !== null && travelToNext !== null) {
-          const arrivalTime = rideTime + (rideDuration + travelToNext) * 60 * 1000;
-          if (arrivalTime > otherTime) {
-            return true; // Conflict: driver can't make it in time
-          }
-        }
+        if (ridesConflict(rideTime, rideToCheck.origin.id, rideToCheck.destination.id, otherTime, otherRide.origin.id))
+          return true;
       }
     }
 
@@ -261,7 +254,6 @@ export function AdminRides() {
 
   // Check if adding a driver to a ride would cause a conflict
   const wouldDriverConflict = (driverId: number, targetRide: { departureTime: Date; originId: number; destinationId: number }): boolean => {
-    // Get all rides assigned to this driver
     const driverRides = rides.filter((r) =>
       r.assignments?.some((a) => a.driver.id === driverId)
     );
@@ -274,27 +266,11 @@ export function AdminRides() {
       const otherTime = new Date(otherRide.departure_time).getTime();
 
       if (otherTime < rideTime) {
-        // Other ride is before target ride
-        // Driver needs to complete otherRide, then travel to targetRide origin
-        const rideDuration = getTravelTime(otherRide.origin.id, otherRide.destination.id);
-        const travelToNext = getTravelTime(otherRide.destination.id, targetRide.originId);
-        if (rideDuration !== null && travelToNext !== null) {
-          const arrivalTime = otherTime + (rideDuration + travelToNext) * 60 * 1000;
-          if (arrivalTime > rideTime) {
-            return true;
-          }
-        }
+        if (ridesConflict(otherTime, otherRide.origin.id, otherRide.destination.id, rideTime, targetRide.originId))
+          return true;
       } else {
-        // Target ride is before other ride
-        // Driver needs to complete targetRide, then travel to otherRide origin
-        const rideDuration = getTravelTime(targetRide.originId, targetRide.destinationId);
-        const travelToNext = getTravelTime(targetRide.destinationId, otherRide.origin.id);
-        if (rideDuration !== null && travelToNext !== null) {
-          const arrivalTime = rideTime + (rideDuration + travelToNext) * 60 * 1000;
-          if (arrivalTime > otherTime) {
-            return true;
-          }
-        }
+        if (ridesConflict(rideTime, targetRide.originId, targetRide.destinationId, otherTime, otherRide.origin.id))
+          return true;
       }
     }
 
