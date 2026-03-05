@@ -7,10 +7,21 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# SECURITY WARNING: don't run with debug turned on in production!
+# Default to False for security - explicitly set to True for development
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() == 'true'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # In production, always set DJANGO_SECRET_KEY environment variable
 _secret_key = os.environ.get('DJANGO_SECRET_KEY', '')
 if not _secret_key:
+    # In production mode, refuse to start without a secret key
+    if not DEBUG:
+        raise ValueError(
+            'DJANGO_SECRET_KEY environment variable must be set in production. '
+            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    # In development, warn and use insecure default
     import warnings
     warnings.warn(
         'DJANGO_SECRET_KEY not set! Using insecure default. '
@@ -19,9 +30,6 @@ if not _secret_key:
     )
     _secret_key = 'insecure-dev-key-only-for-local-development'
 SECRET_KEY = _secret_key
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -100,10 +108,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    'CORS_ALLOWED_ORIGINS',
-    'http://localhost:3000,http://localhost:5173,http://localhost'
-).split(',')
+# For production, explicitly set CORS_ALLOWED_ORIGINS environment variable
+# Development defaults are provided for convenience
+_cors_default = 'http://localhost:3000,http://localhost:5173,http://localhost' if DEBUG else ''
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', _cors_default).split(',') if os.environ.get('CORS_ALLOWED_ORIGINS', _cors_default) else []
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework settings
@@ -115,6 +123,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'EXCEPTION_HANDLER': 'shuttle.exceptions.custom_exception_handler',
 }
 
 # Email settings
@@ -152,3 +161,22 @@ DEMO_SITE = os.environ.get('DEMO_SITE', 'False').lower() == 'true'
 
 # Discord webhook (optional)
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
+
+# Security settings for production
+# These are safe to enable in development as well
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+
+# HTTPS settings - only enforce in production
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# Request size limits to prevent DoS
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB

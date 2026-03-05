@@ -7,6 +7,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
+from django_ratelimit.exceptions import Ratelimited
 from .models import User, SessionToken, hash_token
 from .serializers import (
     UserSerializer, RequestMagicLinkSerializer, VerifyTokenSerializer
@@ -15,8 +17,12 @@ from .serializers import (
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@ratelimit(key='ip', rate='5/h', method='POST', block=True)
 def request_magic_link(request):
-    """Request a magic link to be sent to email."""
+    """Request a magic link to be sent to email.
+    
+    Rate limited to 5 requests per hour per IP to prevent abuse.
+    """
     serializer = RequestMagicLinkSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -48,8 +54,12 @@ def request_magic_link(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@ratelimit(key='ip', rate='10/h', method='GET', block=True)
 def verify_token(request, token):
-    """Verify a magic token and return user info with a session token."""
+    """Verify a magic token and return user info with a session token.
+    
+    Rate limited to 10 requests per hour per IP to prevent brute force.
+    """
     try:
         with transaction.atomic():
             # Use select_for_update to prevent race conditions

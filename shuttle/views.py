@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.db import transaction
+from django_ratelimit.decorators import ratelimit
 
 from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, SiteSettings
 from .serializers import (
@@ -114,8 +115,12 @@ def public_ride_detail(request, ride_id):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@ratelimit(key='ip', rate='10/h', method='POST', block=True)
 def reserve_ride(request, ride_id):
-    """Create a reservation. Auto-confirms for authenticated users, sends email for guests."""
+    """Create a reservation. Auto-confirms for authenticated users, sends email for guests.
+    
+    Rate limited to 10 reservations per hour per IP to prevent abuse.
+    """
     ride = get_object_or_404(Ride, id=ride_id, is_vip=False)
 
     if ride.is_full:
