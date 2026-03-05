@@ -23,6 +23,7 @@ import { AdminDriverAvailability } from './pages/admin/AdminDriverAvailability';
 import { AdminPassengers } from './pages/admin/AdminPassengers';
 import { AdminDriverTimeline } from './pages/admin/AdminDriverTimeline';
 import { AdminSettings } from './pages/admin/AdminSettings';
+import { AdminCarKm } from './pages/admin/AdminCarKm';
 import './App.css';
 
 function ProtectedRoute({
@@ -186,6 +187,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/car-km"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminCarKm />
             </ProtectedRoute>
           }
         />

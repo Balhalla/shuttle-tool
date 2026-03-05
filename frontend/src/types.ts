@@ -177,3 +177,24 @@ export interface DriverTimeline {
   availabilities: TimelineAvailability[];
   assignments: TimelineAssignment[];
 }
+
+export interface SiteSettings {
+  banner_enabled: boolean;
+  banner_text: string;
+  google_routes_api_key: string;
+  base_location_id: number | null;
+}
+
+export interface CarKmEntry {
+  id: number;
+  name: string;
+  license_plate: string;
+  total_km: number;
+  rides: number;
+  missing_distances: boolean;
+}
+
+export interface CarKmResponse {
+  base_location: { id: number; name: string };
+  cars: CarKmEntry[];
+}

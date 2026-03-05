@@ -1,21 +1,28 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useConfig } from '../../context/ConfigContext';
+import type { Location } from '../../types';
 
 export function AdminSettings() {
   const { refreshConfig } = useConfig();
   const [bannerEnabled, setBannerEnabled] = useState(false);
   const [bannerText, setBannerText] = useState('');
+  const [googleRoutesApiKey, setGoogleRoutesApiKey] = useState('');
+  const [baseLocationId, setBaseLocationId] = useState<number | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    api.adminGetSiteSettings()
-      .then((data) => {
+    Promise.all([api.adminGetSiteSettings(), api.adminGetLocations()])
+      .then(([data, locs]) => {
         setBannerEnabled(data.banner_enabled);
         setBannerText(data.banner_text);
+        setGoogleRoutesApiKey(data.google_routes_api_key);
+        setBaseLocationId(data.base_location_id);
+        setLocations(locs);
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -28,9 +35,13 @@ export function AdminSettings() {
       const data = await api.adminUpdateSiteSettings({
         banner_enabled: bannerEnabled,
         banner_text: bannerText,
+        google_routes_api_key: googleRoutesApiKey,
+        base_location_id: baseLocationId,
       });
       setBannerEnabled(data.banner_enabled);
       setBannerText(data.banner_text);
+      setGoogleRoutesApiKey(data.google_routes_api_key);
+      setBaseLocationId(data.base_location_id);
       setMessage('Settings saved.');
       refreshConfig();
     } catch {
@@ -78,6 +89,38 @@ export function AdminSettings() {
             Preview: {bannerText}
           </div>
         )}
+
+        <h2>Google Routes API</h2>
+        <div className="form-group">
+          <label htmlFor="google-routes-api-key">API Key</label>
+          <input
+            id="google-routes-api-key"
+            type="password"
+            value={googleRoutesApiKey}
+            onChange={(e) => setGoogleRoutesApiKey(e.target.value)}
+            placeholder="Enter Google Routes API key..."
+            style={{ width: '100%' }}
+          />
+          <small style={{ color: '#666' }}>Used to fetch driving distances for Car KM Overview.</small>
+        </div>
+
+        <h2>Base Location</h2>
+        <div className="form-group">
+          <label htmlFor="base-location">Base location (home base for cars)</label>
+          <select
+            id="base-location"
+            value={baseLocationId ?? ''}
+            onChange={(e) => setBaseLocationId(e.target.value ? parseInt(e.target.value) : null)}
+            style={{ width: '100%' }}
+          >
+            <option value="">None / not set</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
+          <small style={{ color: '#666' }}>Used as the starting/ending point for Car KM calculations.</small>
+        </div>
+
         <div className="form-actions">
           <button onClick={handleSave} disabled={saving} className="btn btn-primary">
             {saving ? 'Saving…' : 'Save'}

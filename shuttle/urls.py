@@ -39,5 +39,6 @@ urlpatterns = [
     path('admin/passengers/', views.admin_passenger_list, name='admin_passenger_list'),
     path('admin/driver-timeline/', views.admin_driver_timeline, name='admin_driver_timeline'),
     path('admin/settings/', views.admin_site_settings, name='admin_site_settings'),
+    path('admin/car-km/', views.admin_car_km_overview, name='admin_car_km_overview'),
     path('', include(router.urls)),
 ]

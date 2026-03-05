@@ -453,14 +453,19 @@ class ApiClient {
   }
 
   async adminGetSiteSettings() {
-    return this.request<{ banner_enabled: boolean; banner_text: string }>('/admin/settings/');
+    return this.request<import('../types').SiteSettings>('/admin/settings/');
   }
 
-  async adminUpdateSiteSettings(data: { banner_enabled?: boolean; banner_text?: string }) {
-    return this.request<{ banner_enabled: boolean; banner_text: string }>('/admin/settings/', {
+  async adminUpdateSiteSettings(data: Partial<import('../types').SiteSettings>) {
+    return this.request<import('../types').SiteSettings>('/admin/settings/', {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
+  }
+
+  async adminGetCarKm(baseLocationId?: number) {
+    const query = baseLocationId ? `?base_location_id=${baseLocationId}` : '';
+    return this.request<import('../types').CarKmResponse>(`/admin/car-km/${query}`);
   }
 
   async adminConfirmReservation(id: number) {

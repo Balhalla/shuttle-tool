@@ -49,6 +49,7 @@ class TravelTime(models.Model):
         related_name='travel_times_to'
     )
     minutes = models.PositiveIntegerField(help_text="Travel time in minutes")
+    distance_meters = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -263,6 +264,11 @@ class SiteSettings(models.Model):
     """Singleton model for site-wide settings."""
     banner_enabled = models.BooleanField(default=False)
     banner_text = models.TextField(blank=True, default='')
+    google_routes_api_key = models.CharField(max_length=255, blank=True, default='')
+    base_location = models.ForeignKey(
+        'Location', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='base_for_settings'
+    )
 
     class Meta:
         verbose_name = 'Site Settings'

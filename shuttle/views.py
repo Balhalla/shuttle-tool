@@ -2,6 +2,8 @@
 import csv
 import io
 import secrets
+import urllib.request
+import json as json_module
 from collections import defaultdict
 from datetime import timedelta, datetime
 from rest_framework import status, viewsets
@@ -1114,14 +1116,229 @@ def admin_site_settings(request):
         return Response({
             'banner_enabled': site.banner_enabled,
             'banner_text': site.banner_text,
+            'google_routes_api_key': site.google_routes_api_key,
+            'base_location_id': site.base_location_id,
         })
     # PATCH
     if 'banner_enabled' in request.data:
         site.banner_enabled = bool(request.data['banner_enabled'])
     if 'banner_text' in request.data:
         site.banner_text = request.data['banner_text']
+    if 'google_routes_api_key' in request.data:
+        site.google_routes_api_key = request.data['google_routes_api_key']
+    if 'base_location_id' in request.data:
+        val = request.data['base_location_id']
+        site.base_location_id = int(val) if val else None
     site.save()
     return Response({
         'banner_enabled': site.banner_enabled,
         'banner_text': site.banner_text,
+        'google_routes_api_key': site.google_routes_api_key,
+        'base_location_id': site.base_location_id,
+    })
+
+
+def _fetch_distance(origin, destination, api_key, cache):
+    """Fetch driving distance in meters between two locations.
+
+    Checks cache, then TravelTime.distance_meters, then Google Routes API.
+    Returns None if no distance data is available.
+    """
+    key = (origin.id, destination.id)
+    if key in cache:
+        return cache[key]
+
+    # Same location → 0 meters
+    if origin.id == destination.id:
+        cache[key] = 0
+        return 0
+
+    # Check TravelTime for stored distance_meters (both directions)
+    try:
+        tt = TravelTime.objects.get(origin=origin, destination=destination)
+        if tt.distance_meters is not None:
+            cache[key] = tt.distance_meters
+            return tt.distance_meters
+    except TravelTime.DoesNotExist:
+        pass
+
+    # Try reverse pair as symmetric fallback
+    try:
+        tt_rev = TravelTime.objects.get(origin=destination, destination=origin)
+        if tt_rev.distance_meters is not None:
+            cache[key] = tt_rev.distance_meters
+            return tt_rev.distance_meters
+    except TravelTime.DoesNotExist:
+        pass
+
+    # Try Google Routes API if key and coordinates are available
+    if (api_key and
+            origin.latitude is not None and origin.longitude is not None and
+            destination.latitude is not None and destination.longitude is not None):
+        try:
+            payload = json_module.dumps({
+                'origin': {'location': {'latLng': {'latitude': float(origin.latitude), 'longitude': float(origin.longitude)}}},
+                'destination': {'location': {'latLng': {'latitude': float(destination.latitude), 'longitude': float(destination.longitude)}}},
+                'travelMode': 'DRIVE',
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'https://routes.googleapis.com/directions/v2:computeRoutes',
+                data=payload,
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': api_key,
+                    'X-Goog-FieldMask': 'routes.distanceMeters',
+                },
+                method='POST',
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json_module.loads(resp.read())
+            distance = result['routes'][0]['distanceMeters']
+            # Save back to TravelTime (get_or_create; minutes defaults to 0 for new entries)
+            tt_obj, _ = TravelTime.objects.get_or_create(
+                origin=origin, destination=destination,
+                defaults={'minutes': 0},
+            )
+            tt_obj.distance_meters = distance
+            tt_obj.save(update_fields=['distance_meters'])
+            cache[key] = distance
+            return distance
+        except Exception:
+            pass
+
+    cache[key] = None
+    return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def admin_car_km_overview(request):
+    """Calculate total km driven per car across non-empty rides."""
+    site = SiteSettings.get()
+    api_key = site.google_routes_api_key
+
+    # Allow query param to override saved base location
+    base_location_id = request.query_params.get('base_location_id')
+    if base_location_id:
+        try:
+            base = Location.objects.get(pk=int(base_location_id))
+        except (Location.DoesNotExist, ValueError):
+            return Response({'error': 'Invalid base_location_id'}, status=400)
+    elif site.base_location_id:
+        base = site.base_location
+    else:
+        base = None
+
+    if base is None:
+        return Response({'error': 'No base location configured. Set one in Site Settings or pass base_location_id.'}, status=400)
+
+    # Get all cars that have assignments on non-empty rides
+    non_empty_ride_ids = (
+        Ride.objects.filter(reservations__status='confirmed')
+        .values_list('id', flat=True)
+        .distinct()
+    )
+
+    # Get assignments for non-empty rides, grouped by car
+    assignments_qs = (
+        RideAssignment.objects
+        .filter(ride_id__in=non_empty_ride_ids)
+        .select_related('car', 'ride', 'ride__origin', 'ride__destination')
+        .order_by('car_id', 'ride__departure_time')
+    )
+
+    # Group by car
+    assignments_by_car = defaultdict(list)
+    for a in assignments_qs:
+        assignments_by_car[a.car_id].append(a)
+
+    # Pre-load travel times for minute lookups
+    tt_minutes = {}
+    for tt in TravelTime.objects.all():
+        tt_minutes[(tt.origin_id, tt.destination_id)] = tt.minutes
+
+    distance_cache = {}
+
+    # Get all cars that appear in our assignments (preserve ordering)
+    car_ids = list(assignments_by_car.keys())
+    cars = {c.id: c for c in Car.objects.filter(id__in=car_ids)}
+
+    result_cars = []
+    for car_id in car_ids:
+        car = cars[car_id]
+        car_assignments = assignments_by_car[car_id]
+
+        current_pos = base
+        prev_arrival_time = None
+        total_meters = 0
+        missing = False
+
+        for assignment in car_assignments:
+            ride = assignment.ride
+            origin = ride.origin
+            dest = ride.destination
+            departure_time = ride.departure_time
+
+            if current_pos.id == origin.id:
+                # Car is already at origin
+                if prev_arrival_time is not None:
+                    gap = departure_time - prev_arrival_time
+                    if gap.total_seconds() > 20 * 60 and origin.id != base.id:
+                        # Long wait → car went home and came back
+                        d1 = _fetch_distance(origin, base, api_key, distance_cache)
+                        d2 = _fetch_distance(base, origin, api_key, distance_cache)
+                        if d1 is None or d2 is None:
+                            missing = True
+                        else:
+                            total_meters += d1 + d2
+            else:
+                # Car is at the wrong place → reposition via base
+                if current_pos.id != base.id:
+                    d = _fetch_distance(current_pos, base, api_key, distance_cache)
+                    if d is None:
+                        missing = True
+                    else:
+                        total_meters += d
+                if base.id != origin.id:
+                    d = _fetch_distance(base, origin, api_key, distance_cache)
+                    if d is None:
+                        missing = True
+                    else:
+                        total_meters += d
+
+            # Add ride distance
+            d_ride = _fetch_distance(origin, dest, api_key, distance_cache)
+            if d_ride is None:
+                missing = True
+            else:
+                total_meters += d_ride
+
+            # Update tracking
+            tt_min = tt_minutes.get((origin.id, dest.id), 0)
+            prev_arrival_time = departure_time + timedelta(minutes=tt_min)
+            current_pos = dest
+
+        # Return to base after last ride
+        if current_pos.id != base.id:
+            d = _fetch_distance(current_pos, base, api_key, distance_cache)
+            if d is None:
+                missing = True
+            else:
+                total_meters += d
+
+        result_cars.append({
+            'id': car.id,
+            'name': car.name,
+            'license_plate': car.license_plate,
+            'total_km': round(total_meters / 1000, 1),
+            'rides': len(car_assignments),
+            'missing_distances': missing,
+        })
+
+    # Sort by car name
+    result_cars.sort(key=lambda c: c['name'])
+
+    return Response({
+        'base_location': {'id': base.id, 'name': base.name},
+        'cars': result_cars,
     })
