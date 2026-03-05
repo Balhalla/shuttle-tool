@@ -1,22 +1,42 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { ReportSummary } from '../../types';
+import type { ReportSummary, Location, CarKmResponse } from '../../types';
 
 export function AdminReports() {
   const [report, setReport] = useState<ReportSummary | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [baseLocationId, setBaseLocationId] = useState<number | ''>('');
+  const [carKm, setCarKm] = useState<CarKmResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [carKmLoading, setCarKmLoading] = useState(false);
   const [error, setError] = useState('');
+  const [carKmError, setCarKmError] = useState('');
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    Promise.all([api.adminGetReportSummary(), api.adminGetLocations(), api.adminGetSiteSettings()])
+      .then(([data, locs, settings]) => {
+        setReport(data);
+        setLocations(locs);
+        if (settings.base_location_id) {
+          setBaseLocationId(settings.base_location_id);
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load report'))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const loadData = async () => {
+  const handleCalculateCarKm = async () => {
+    if (!baseLocationId) return;
+    setCarKmLoading(true);
+    setCarKmError('');
     try {
-      const data = await api.adminGetReportSummary();
-      setReport(data);
+      const data = await api.adminGetCarKm(baseLocationId);
+      setCarKm(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load report');
+      setCarKmError(err instanceof Error ? err.message : 'Failed to calculate car km');
     } finally {
-      setLoading(false);
+      setCarKmLoading(false);
     }
   };
 
@@ -30,11 +50,10 @@ export function AdminReports() {
         <h1>Time &amp; KM Report</h1>
       </div>
 
-      <p style={{ color: '#666', marginBottom: '1rem' }}>
-        Summary based on departed rides only. Travel times come from configured travel time data; distances from stored distance data.
-      </p>
-
       <h2>Driver Hours</h2>
+      <p style={{ color: '#666', marginBottom: '1rem' }}>
+        Based on departed rides. Travel times come from configured travel time data.
+      </p>
       {report.drivers.length === 0 ? (
         <p>No departed rides found.</p>
       ) : (
@@ -70,38 +89,87 @@ export function AdminReports() {
       )}
 
       <h2 style={{ marginTop: '2rem' }}>Car Kilometers</h2>
-      {report.cars.length === 0 ? (
-        <p>No car data available.</p>
-      ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Car</th>
-              <th>License Plate</th>
-              <th>Rides</th>
-              <th>Total KM</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.cars.map((c) => (
-              <tr key={c.car_id}>
-                <td>{c.name}</td>
-                <td>{c.license_plate || '—'}</td>
-                <td>{c.rides}</td>
-                <td>{c.total_km}</td>
-                <td>{c.missing_distances ? '⚠️ Missing distance data' : ''}</td>
-              </tr>
+      <p style={{ color: '#666', marginBottom: '1rem' }}>
+        Select a base location to calculate distances via Google Routes API.
+        Make sure a <Link to="/admin/settings">Google Routes API key</Link> is configured.
+      </p>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '1rem', maxWidth: '500px' }}>
+        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+          <label htmlFor="base-location">Base location</label>
+          <select
+            id="base-location"
+            value={baseLocationId}
+            onChange={(e) => setBaseLocationId(e.target.value ? parseInt(e.target.value) : '')}
+            style={{ width: '100%' }}
+          >
+            <option value="">Select base location…</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
             ))}
-            <tr style={{ fontWeight: 'bold', borderTop: '2px solid #333' }}>
-              <td>Total</td>
-              <td></td>
-              <td>{report.cars.reduce((sum, c) => sum + c.rides, 0)}</td>
-              <td>{report.cars.reduce((sum, c) => sum + c.total_km, 0).toFixed(1)}</td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
+          </select>
+        </div>
+        <button
+          onClick={handleCalculateCarKm}
+          disabled={carKmLoading || !baseLocationId}
+          className="btn btn-primary"
+        >
+          {carKmLoading ? 'Calculating…' : 'Calculate'}
+        </button>
+      </div>
+
+      {carKmError && <div className="error" style={{ marginBottom: '1rem' }}>{carKmError}</div>}
+
+      {carKm && (
+        <>
+          <p style={{ color: '#666', marginBottom: '0.75rem' }}>
+            Base location: <strong>{carKm.base_location.name}</strong>
+          </p>
+          {carKm.cars.length === 0 ? (
+            <p>No car data available.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Car</th>
+                  <th>License Plate</th>
+                  <th>Rides</th>
+                  <th>Total KM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {carKm.cars.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      {c.name}
+                      {c.missing_distances && (
+                        <span
+                          title="Some distances could not be determined; total may be incomplete."
+                          style={{ marginLeft: '0.4rem', color: '#f0a500', cursor: 'help' }}
+                        >
+                          ⚠
+                        </span>
+                      )}
+                    </td>
+                    <td>{c.license_plate || '—'}</td>
+                    <td>{c.rides}</td>
+                    <td>{c.total_km} km</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 'bold', borderTop: '2px solid #333' }}>
+                  <td>Total</td>
+                  <td></td>
+                  <td>{carKm.cars.reduce((sum, c) => sum + c.rides, 0)}</td>
+                  <td>{carKm.cars.reduce((sum, c) => sum + c.total_km, 0).toFixed(1)} km</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+          {carKm.cars.some((c) => c.missing_distances) && (
+            <p style={{ marginTop: '0.75rem', color: '#888', fontSize: '0.9em' }}>
+              ⚠ Some distances could not be determined. Add coordinates to <Link to="/admin/locations">locations</Link> to improve accuracy.
+            </p>
+          )}
+        </>
       )}
     </div>
   );
