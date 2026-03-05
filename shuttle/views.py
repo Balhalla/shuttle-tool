@@ -1112,20 +1112,20 @@ def admin_driver_timeline(request):
     end = request.query_params.get('end')
 
     # Fetch blocked periods for the range
-    blocked_qs = BlockedPeriod.objects.all()
+    blocked_qs = BlockedPeriod.objects.select_related('driver').all()
     if start:
         blocked_qs = blocked_qs.filter(end_time__gte=start)
     if end:
         blocked_qs = blocked_qs.filter(start_time__lte=end)
-    blocked_periods = [
-        {
+    # Index by driver id for per-driver lookup
+    blocked_by_driver: dict[int, list] = {}
+    for bp in blocked_qs:
+        blocked_by_driver.setdefault(bp.driver_id, []).append({
             'id': bp.id,
             'start_time': bp.start_time.isoformat(),
             'end_time': bp.end_time.isoformat(),
             'reason': bp.reason,
-        }
-        for bp in blocked_qs
-    ]
+        })
 
     result = []
     for driver in drivers:
@@ -1168,11 +1168,11 @@ def admin_driver_timeline(request):
                 }
                 for a in assignments
             ],
+            'blocked_periods': blocked_by_driver.get(driver.id, []),
         })
 
     return Response({
         'drivers': result,
-        'blocked_periods': blocked_periods,
     })
 
 

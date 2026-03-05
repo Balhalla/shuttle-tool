@@ -178,6 +178,12 @@ export interface DriverTimeline {
   };
   availabilities: TimelineAvailability[];
   assignments: TimelineAssignment[];
+  blocked_periods: {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reason: string;
+  }[];
 }
 
 export interface SiteSettings {
@@ -204,6 +210,7 @@ export interface CarKmResponse {
 
 export interface BlockedPeriod {
   id: number;
+  driver: { id: number; name: string; email: string };
   start_time: string;
   end_time: string;
   reason: string;
@@ -213,12 +220,6 @@ export interface BlockedPeriod {
 
 export interface DriverTimelineResponse {
   drivers: DriverTimeline[];
-  blocked_periods: {
-    id: number;
-    start_time: string;
-    end_time: string;
-    reason: string;
-  }[];
 }
 
 export interface DriverReportEntry {

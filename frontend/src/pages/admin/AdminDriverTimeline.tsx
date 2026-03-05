@@ -6,7 +6,6 @@ import type { DriverTimeline } from '../../types';
 export function AdminDriverTimeline() {
   const navigate = useNavigate();
   const [data, setData] = useState<DriverTimeline[]>([]);
-  const [blockedPeriods, setBlockedPeriods] = useState<{ id: number; start_time: string; end_time: string; reason: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -31,7 +30,6 @@ export function AdminDriverTimeline() {
         end: rangeEnd,
       });
       setData(result.drivers);
-      setBlockedPeriods(result.blocked_periods);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load timeline');
     } finally {
@@ -124,7 +122,7 @@ export function AdminDriverTimeline() {
             <div className="timeline-label">{item.driver.name}</div>
             <div className="timeline-track">
               {/* Blocked period blocks (red shade) */}
-              {blockedPeriods.map((bp) => {
+              {item.blocked_periods.map((bp) => {
                 const left = Math.max(0, toPercent(bp.start_time));
                 const right = Math.min(100, toPercent(bp.end_time));
                 if (right <= 0 || left >= 100) return null;

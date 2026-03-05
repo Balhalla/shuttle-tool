@@ -305,7 +305,13 @@ class SiteSettings(models.Model):
 
 
 class BlockedPeriod(models.Model):
-    """A time period during which no rides should be scheduled."""
+    """A time period during which a specific driver should not be booked."""
+    driver = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='blocked_periods',
+        limit_choices_to={'role__in': ['driver', 'admin']}
+    )
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     reason = models.CharField(max_length=255, blank=True, default='')
@@ -317,4 +323,4 @@ class BlockedPeriod(models.Model):
         ordering = ['start_time']
 
     def __str__(self):
-        return f"Blocked: {self.start_time} – {self.end_time} ({self.reason})"
+        return f"Blocked: {self.driver.name} {self.start_time} – {self.end_time} ({self.reason})"

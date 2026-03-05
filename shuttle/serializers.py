@@ -158,7 +158,10 @@ class PassengerSerializer(serializers.ModelSerializer):
 
 
 class BlockedPeriodSerializer(serializers.ModelSerializer):
+    driver = DriverSerializer(read_only=True)
+    driver_id = serializers.IntegerField(write_only=True)
+
     class Meta:
         model = BlockedPeriod
-        fields = ['id', 'start_time', 'end_time', 'reason', 'created_at', 'updated_at']
+        fields = ['id', 'driver', 'driver_id', 'start_time', 'end_time', 'reason', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']

@@ -496,7 +496,7 @@ class ApiClient {
     return this.request<import('../types').BlockedPeriod[]>('/admin/blocked-periods/');
   }
 
-  async adminCreateBlockedPeriod(data: { start_time: string; end_time: string; reason?: string }) {
+  async adminCreateBlockedPeriod(data: { driver_id: number; start_time: string; end_time: string; reason?: string }) {
     return this.request<import('../types').BlockedPeriod>('/admin/blocked-periods/', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
-import type { BlockedPeriod } from '../../types';
+import type { BlockedPeriod, User } from '../../types';
 
 export function AdminBlockedPeriods() {
   const [periods, setPeriods] = useState<BlockedPeriod[]>([]);
+  const [drivers, setDrivers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ start_time: '', end_time: '', reason: '' });
+  const [form, setForm] = useState({ driver_id: 0, start_time: '', end_time: '', reason: '' });
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const data = await api.adminGetBlockedPeriods();
-      setPeriods(data);
+      const [periodsData, driversData] = await Promise.all([
+        api.adminGetBlockedPeriods(),
+        api.adminGetDrivers(),
+      ]);
+      setPeriods(periodsData);
+      setDrivers(driversData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load blocked periods');
     } finally {
@@ -26,6 +31,12 @@ export function AdminBlockedPeriods() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (form.driver_id === 0) {
+      setError('Please select a driver');
+      return;
+    }
+
     try {
       if (editingId) {
         await api.adminUpdateBlockedPeriod(editingId, form);
@@ -44,7 +55,7 @@ export function AdminBlockedPeriods() {
       const d = new Date(s);
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     };
-    setForm({ start_time: toLocal(bp.start_time), end_time: toLocal(bp.end_time), reason: bp.reason });
+    setForm({ driver_id: bp.driver.id, start_time: toLocal(bp.start_time), end_time: toLocal(bp.end_time), reason: bp.reason });
     setEditingId(bp.id);
     setShowForm(true);
   };
@@ -60,7 +71,7 @@ export function AdminBlockedPeriods() {
   };
 
   const resetForm = () => {
-    setForm({ start_time: '', end_time: '', reason: '' });
+    setForm({ driver_id: 0, start_time: '', end_time: '', reason: '' });
     setEditingId(null);
     setShowForm(false);
   };
@@ -76,14 +87,14 @@ export function AdminBlockedPeriods() {
   return (
     <div className="admin-blocked-periods">
       <div className="page-header">
-        <h1>Blocked Periods</h1>
+        <h1>Driver Blocked Periods</h1>
         <button onClick={() => setShowForm(true)} className="btn btn-primary">Add Blocked Period</button>
       </div>
 
       {error && <div className="error">{error}</div>}
 
       <p style={{ color: '#666', marginBottom: '1rem' }}>
-        Blocked periods are shown on the driver timeline. They indicate times when no rides should be scheduled.
+        Blocked periods mark times when a specific driver should not be booked. They are shown on the driver timeline.
       </p>
 
       {showForm && (
@@ -91,6 +102,16 @@ export function AdminBlockedPeriods() {
           <div className="modal">
             <h2>{editingId ? 'Edit Blocked Period' : 'Add Blocked Period'}</h2>
             <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label htmlFor="bp-driver">Driver</label>
+                <select id="bp-driver" value={form.driver_id}
+                  onChange={(e) => setForm({ ...form, driver_id: Number(e.target.value) })} required>
+                  <option value={0}>Select driver...</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>{driver.name} ({driver.email})</option>
+                  ))}
+                </select>
+              </div>
               <div className="form-group">
                 <label htmlFor="bp-start">Start Time</label>
                 <input id="bp-start" type="datetime-local" value={form.start_time}
@@ -105,7 +126,7 @@ export function AdminBlockedPeriods() {
                 <label htmlFor="bp-reason">Reason</label>
                 <input id="bp-reason" type="text" value={form.reason}
                   onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  placeholder="e.g. Main stage performance" />
+                  placeholder="e.g. Personal commitment" />
               </div>
               <div className="form-actions">
                 <button type="button" onClick={resetForm} className="btn btn-secondary">Cancel</button>
@@ -122,6 +143,7 @@ export function AdminBlockedPeriods() {
         <table className="data-table">
           <thead>
             <tr>
+              <th>Driver</th>
               <th>Start</th>
               <th>End</th>
               <th>Reason</th>
@@ -131,6 +153,7 @@ export function AdminBlockedPeriods() {
           <tbody>
             {periods.map((bp) => (
               <tr key={bp.id}>
+                <td>{bp.driver.name}</td>
                 <td>{formatTime(bp.start_time)}</td>
                 <td>{formatTime(bp.end_time)}</td>
                 <td>{bp.reason || '—'}</td>
