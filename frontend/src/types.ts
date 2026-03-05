@@ -54,6 +54,7 @@ export interface Ride {
   destination_id?: number;
   departure_time: string;
   is_vip: boolean;
+  is_deleted?: boolean;
   assignments: RideAssignment[];
   available_seats: number;
   remaining_capacity: number;
@@ -62,6 +63,7 @@ export interface Ride {
   is_full: boolean;
   registration_open: boolean;
   all_departed?: boolean;
+  driver_phones?: { name: string; phone: string }[];
   created_at: string;
 }
 
@@ -183,6 +185,7 @@ export interface SiteSettings {
   banner_text: string;
   google_routes_api_key: string;
   base_location_id: number | null;
+  show_driver_phones: boolean;
 }
 
 export interface CarKmEntry {
@@ -197,4 +200,46 @@ export interface CarKmEntry {
 export interface CarKmResponse {
   base_location: { id: number; name: string };
   cars: CarKmEntry[];
+}
+
+export interface BlockedPeriod {
+  id: number;
+  start_time: string;
+  end_time: string;
+  reason: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriverTimelineResponse {
+  drivers: DriverTimeline[];
+  blocked_periods: {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reason: string;
+  }[];
+}
+
+export interface DriverReportEntry {
+  driver_id: number;
+  name: string;
+  email: string;
+  total_minutes: number;
+  total_hours: number;
+  rides: number;
+}
+
+export interface CarReportEntry {
+  car_id: number;
+  name: string;
+  license_plate: string;
+  total_km: number;
+  rides: number;
+  missing_distances: boolean;
+}
+
+export interface ReportSummary {
+  drivers: DriverReportEntry[];
+  cars: CarReportEntry[];
 }

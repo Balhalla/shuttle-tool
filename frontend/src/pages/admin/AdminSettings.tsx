@@ -14,6 +14,7 @@ export function AdminSettings() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [showDriverPhones, setShowDriverPhones] = useState(false);
 
   useEffect(() => {
     Promise.all([api.adminGetSiteSettings(), api.adminGetLocations()])
@@ -22,6 +23,7 @@ export function AdminSettings() {
         setBannerText(data.banner_text);
         setGoogleRoutesApiKey(data.google_routes_api_key);
         setBaseLocationId(data.base_location_id);
+        setShowDriverPhones(data.show_driver_phones);
         setLocations(locs);
       })
       .catch(() => setError('Failed to load settings.'))
@@ -37,11 +39,13 @@ export function AdminSettings() {
         banner_text: bannerText,
         google_routes_api_key: googleRoutesApiKey,
         base_location_id: baseLocationId,
+        show_driver_phones: showDriverPhones,
       });
       setBannerEnabled(data.banner_enabled);
       setBannerText(data.banner_text);
       setGoogleRoutesApiKey(data.google_routes_api_key);
       setBaseLocationId(data.base_location_id);
+      setShowDriverPhones(data.show_driver_phones);
       setMessage('Settings saved.');
       refreshConfig();
     } catch {
@@ -119,6 +123,21 @@ export function AdminSettings() {
             ))}
           </select>
           <small style={{ color: '#666' }}>Used as the starting/ending point for Car KM calculations.</small>
+        </div>
+
+        <h2>Passenger Experience</h2>
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={showDriverPhones}
+              onChange={(e) => setShowDriverPhones(e.target.checked)}
+              style={{ marginRight: '0.5rem' }}
+            />
+            Show driver phone numbers to passengers
+          </label>
+          <br />
+          <small style={{ color: '#666' }}>When enabled, passengers can see driver contact info on the ride detail page.</small>
         </div>
 
         <div className="form-actions">

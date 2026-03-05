@@ -1,6 +1,6 @@
 """Serializers for shuttle app."""
 from rest_framework import serializers
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation
+from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, BlockedPeriod
 from accounts.serializers import UserSerializer, DriverSerializer
 
 
@@ -60,7 +60,7 @@ class RideSerializer(serializers.ModelSerializer):
         model = Ride
         fields = [
             'id', 'origin', 'origin_id', 'destination', 'destination_id',
-            'departure_time', 'is_vip', 'assignments', 'available_seats',
+            'departure_time', 'is_vip', 'is_deleted', 'assignments', 'available_seats',
             'remaining_capacity', 'seats_remaining', 'reserved_seats',
             'is_full', 'registration_open', 'created_at'
         ]
@@ -82,7 +82,7 @@ class RideListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'origin', 'destination', 'departure_time',
             'available_seats', 'seats_remaining', 'is_full',
-            'registration_open', 'is_vip', 'all_departed'
+            'registration_open', 'is_vip', 'all_departed', 'is_deleted'
         ]
 
 
@@ -155,3 +155,10 @@ class PassengerSerializer(serializers.ModelSerializer):
 
     def get_phone(self, obj):
         return obj.user.phone if obj.user and obj.user.phone else obj.guest_phone
+
+
+class BlockedPeriodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlockedPeriod
+        fields = ['id', 'start_time', 'end_time', 'reason', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']

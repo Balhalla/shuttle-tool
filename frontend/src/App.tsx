@@ -24,6 +24,8 @@ import { AdminPassengers } from './pages/admin/AdminPassengers';
 import { AdminDriverTimeline } from './pages/admin/AdminDriverTimeline';
 import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminCarKm } from './pages/admin/AdminCarKm';
+import { AdminBlockedPeriods } from './pages/admin/AdminBlockedPeriods';
+import { AdminReports } from './pages/admin/AdminReports';
 import './App.css';
 
 function ProtectedRoute({
@@ -195,6 +197,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminCarKm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/blocked-periods"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminBlockedPeriods />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/reports"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminReports />
             </ProtectedRoute>
           }
         />

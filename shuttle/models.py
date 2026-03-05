@@ -62,6 +62,12 @@ class TravelTime(models.Model):
         return f"{self.origin.name} -> {self.destination.name}: {self.minutes} min"
 
 
+class ActiveRideManager(models.Manager):
+    """Default manager that excludes soft-deleted rides."""
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+
 class Ride(models.Model):
     origin = models.ForeignKey(
         Location,
@@ -75,6 +81,8 @@ class Ride(models.Model):
     )
     departure_time = models.DateTimeField()
     is_vip = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -85,12 +93,25 @@ class Ride(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ActiveRideManager()
+    all_objects = models.Manager()
+
     class Meta:
         db_table = 'rides'
         ordering = ['departure_time']
 
     def __str__(self):
         return f"{self.origin} → {self.destination} at {self.departure_time}"
+
+    def soft_delete(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+    def restore(self):
+        self.is_deleted = False
+        self.deleted_at = None
+        self.save()
 
     @property
     def available_seats(self):
@@ -269,6 +290,7 @@ class SiteSettings(models.Model):
         'Location', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='base_for_settings'
     )
+    show_driver_phones = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Site Settings'
@@ -280,3 +302,19 @@ class SiteSettings(models.Model):
 
     def __str__(self):
         return 'Site Settings'
+
+
+class BlockedPeriod(models.Model):
+    """A time period during which no rides should be scheduled."""
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    reason = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'blocked_periods'
+        ordering = ['start_time']
+
+    def __str__(self):
+        return f"Blocked: {self.start_time} – {self.end_time} ({self.reason})"

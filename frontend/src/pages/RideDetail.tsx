@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { PhoneInput } from '../components/PhoneInput';
+import { PhoneInput, PhoneLink } from '../components/PhoneInput';
 import type { Ride } from '../types';
 
 export function RideDetail() {
@@ -124,6 +124,18 @@ export function RideDetail() {
           </span>
         </div>
       </div>
+
+      {ride.driver_phones && ride.driver_phones.length > 0 && (
+        <div className="driver-phones" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#f0f7ff', borderRadius: '8px' }}>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>🚗 Your Driver{ride.driver_phones.length > 1 ? 's' : ''}</h3>
+          {ride.driver_phones.map((dp, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <strong>{dp.name}</strong>
+              {dp.phone && <PhoneLink phone={dp.phone} />}
+            </div>
+          ))}
+        </div>
+      )}
 
       {success && (
         <div className="success">

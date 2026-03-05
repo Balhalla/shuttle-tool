@@ -447,7 +447,7 @@ class ApiClient {
     if (params?.start) query.append('start', params.start);
     if (params?.end) query.append('end', params.end);
     const queryStr = query.toString();
-    return this.request<import('../types').DriverTimeline[]>(
+    return this.request<import('../types').DriverTimelineResponse>(
       `/admin/driver-timeline/${queryStr ? `?${queryStr}` : ''}`
     );
   }
@@ -478,6 +478,47 @@ class ApiClient {
     return this.request<import('../types').Reservation>(`/admin/reservations/${id}/cancel/`, {
       method: 'POST',
     });
+  }
+
+  // Soft delete / trash
+  async adminGetTrashRides() {
+    return this.request<import('../types').Ride[]>('/admin/rides/trash/');
+  }
+
+  async adminRestoreRide(id: number) {
+    return this.request<import('../types').Ride>(`/admin/rides/${id}/restore/`, {
+      method: 'POST',
+    });
+  }
+
+  // Blocked periods
+  async adminGetBlockedPeriods() {
+    return this.request<import('../types').BlockedPeriod[]>('/admin/blocked-periods/');
+  }
+
+  async adminCreateBlockedPeriod(data: { start_time: string; end_time: string; reason?: string }) {
+    return this.request<import('../types').BlockedPeriod>('/admin/blocked-periods/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminUpdateBlockedPeriod(id: number, data: Partial<import('../types').BlockedPeriod>) {
+    return this.request<import('../types').BlockedPeriod>(`/admin/blocked-periods/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminDeleteBlockedPeriod(id: number) {
+    return this.request<void>(`/admin/blocked-periods/${id}/`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Reports
+  async adminGetReportSummary() {
+    return this.request<import('../types').ReportSummary>('/admin/reports/summary/');
   }
 }
 

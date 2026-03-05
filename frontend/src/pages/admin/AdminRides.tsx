@@ -32,6 +32,8 @@ export function AdminRides() {
   const [showPastRides, setShowPastRides] = useState(false);
   const [driverAvailabilities, setDriverAvailabilities] = useState<DriverAvailability[]>([]);
   const [travelTimes, setTravelTimes] = useState<TravelTime[]>([]);
+  const [trashRides, setTrashRides] = useState<Ride[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
 
   // CSV import state
   const [showCsvImport, setShowCsvImport] = useState(false);
@@ -45,13 +47,14 @@ export function AdminRides() {
 
   const loadData = async () => {
     try {
-      const [ridesData, locationsData, driversData, carsData, availabilities, travelTimesData] = await Promise.all([
+      const [ridesData, locationsData, driversData, carsData, availabilities, travelTimesData, trashData] = await Promise.all([
         api.adminGetRides(),
         api.adminGetLocations(),
         api.adminGetDrivers(),
         api.adminGetCars(),
         api.adminGetDriverAvailabilities(),
         api.adminGetTravelTimes(),
+        api.adminGetTrashRides(),
       ]);
       setRides(ridesData);
       setLocations(locationsData);
@@ -59,6 +62,7 @@ export function AdminRides() {
       setCars(carsData);
       setDriverAvailabilities(availabilities);
       setTravelTimes(travelTimesData);
+      setTrashRides(trashData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -111,7 +115,7 @@ export function AdminRides() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this ride?')) return;
+    if (!confirm('Move this ride to trash?')) return;
 
     try {
       await api.adminDeleteRide(id);
@@ -156,6 +160,15 @@ export function AdminRides() {
     setShowCsvImport(false);
     setCsvFile(null);
     setCsvResult(null);
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.adminRestoreRide(id);
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore ride');
+    }
   };
 
   const openAssignmentModal = (ride: Ride) => {
@@ -778,6 +791,48 @@ export function AdminRides() {
                 </tr>
               </thead>
               <tbody>{pastRides.map(renderRideRow)}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {trashRides.length > 0 && (
+        <div className="past-rides-section">
+          <button
+            className="collapsible-header"
+            onClick={() => setShowTrash(!showTrash)}
+          >
+            <span>🗑️ Trash ({trashRides.length})</span>
+            <span className="collapse-icon">{showTrash ? '▼' : '▶'}</span>
+          </button>
+          {showTrash && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Route</th>
+                  <th>Departure</th>
+                  <th>Drivers</th>
+                  <th>Seats</th>
+                  <th>VIP</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trashRides.map((ride) => (
+                  <tr key={ride.id} style={{ opacity: 0.6 }}>
+                    <td>{ride.origin.name} &rarr; {ride.destination.name}</td>
+                    <td>{formatTime(ride.departure_time)}</td>
+                    <td>{getDriverNames(ride)}</td>
+                    <td>{ride.reserved_seats}/{ride.available_seats}</td>
+                    <td>{ride.is_vip ? '👑' : ''}</td>
+                    <td>
+                      <button onClick={() => handleRestore(ride.id)} className="btn btn-small btn-primary">
+                        Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           )}
         </div>

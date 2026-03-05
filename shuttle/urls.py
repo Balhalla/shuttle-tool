@@ -12,6 +12,7 @@ router.register(r'admin/users', views.AdminUserViewSet, basename='admin-user')
 router.register(r'admin/reservations', views.AdminReservationViewSet, basename='admin-reservation')
 router.register(r'admin/travel-times', views.AdminTravelTimeViewSet, basename='admin-travel-time')
 router.register(r'admin/driver-availabilities', views.AdminDriverAvailabilityViewSet, basename='admin-driver-availability')
+router.register(r'admin/blocked-periods', views.AdminBlockedPeriodViewSet, basename='admin-blocked-period')
 
 urlpatterns = [
     # Config
@@ -40,5 +41,6 @@ urlpatterns = [
     path('admin/driver-timeline/', views.admin_driver_timeline, name='admin_driver_timeline'),
     path('admin/settings/', views.admin_site_settings, name='admin_site_settings'),
     path('admin/car-km/', views.admin_car_km_overview, name='admin_car_km_overview'),
+    path('admin/reports/summary/', views.admin_report_summary, name='admin_report_summary'),
     path('', include(router.urls)),
 ]

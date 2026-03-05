@@ -6,6 +6,7 @@ import type { DriverTimeline } from '../../types';
 export function AdminDriverTimeline() {
   const navigate = useNavigate();
   const [data, setData] = useState<DriverTimeline[]>([]);
+  const [blockedPeriods, setBlockedPeriods] = useState<{ id: number; start_time: string; end_time: string; reason: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -29,7 +30,8 @@ export function AdminDriverTimeline() {
         start: rangeStart,
         end: rangeEnd,
       });
-      setData(result);
+      setData(result.drivers);
+      setBlockedPeriods(result.blocked_periods);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load timeline');
     } finally {
@@ -121,6 +123,27 @@ export function AdminDriverTimeline() {
           <div key={item.driver.id} className="timeline-row">
             <div className="timeline-label">{item.driver.name}</div>
             <div className="timeline-track">
+              {/* Blocked period blocks (red shade) */}
+              {blockedPeriods.map((bp) => {
+                const left = Math.max(0, toPercent(bp.start_time));
+                const right = Math.min(100, toPercent(bp.end_time));
+                if (right <= 0 || left >= 100) return null;
+                return (
+                  <div
+                    key={`blocked-${bp.id}`}
+                    className="timeline-block blocked"
+                    style={{
+                      left: `${left}%`,
+                      width: `${right - left}%`,
+                      backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                      borderTop: '2px solid #dc3545',
+                      borderBottom: '2px solid #dc3545',
+                      zIndex: 0,
+                    }}
+                    title={`Blocked: ${bp.reason || 'No reason'} (${formatHour(new Date(bp.start_time))} – ${formatHour(new Date(bp.end_time))})`}
+                  />
+                );
+              })}
               {/* Availability blocks (light shade) */}
               {item.availabilities.map((avail) => {
                 const left = Math.max(0, toPercent(avail.start_time));
@@ -174,6 +197,9 @@ export function AdminDriverTimeline() {
         </span>
         <span className="legend-item">
           <span className="legend-swatch" style={{ backgroundColor: '#d4a017', border: '2px solid #b8860b' }} /> VIP ride
+        </span>
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ backgroundColor: 'rgba(220, 53, 69, 0.2)', border: '2px solid #dc3545' }} /> Blocked period
         </span>
       </div>
     </div>

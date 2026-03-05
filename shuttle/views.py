@@ -18,11 +18,12 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.db import transaction
 
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, SiteSettings
+from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, SiteSettings, BlockedPeriod
 from .serializers import (
     CarSerializer, LocationSerializer, TravelTimeSerializer, RideSerializer, RideListSerializer,
     RideAssignmentSerializer, ReservationSerializer, ReservationCreateSerializer,
     PassengerSerializer, DriverPassengerSerializer, AdminAddPassengerSerializer,
+    BlockedPeriodSerializer,
 )
 from .permissions import IsAdmin, IsDriver, IsDriverOrAdmin
 from accounts.models import User, DriverAvailability, hash_token
@@ -108,8 +109,19 @@ def public_ride_list(request):
 def public_ride_detail(request, ride_id):
     """Get details of a specific public ride."""
     ride = get_object_or_404(Ride, id=ride_id, is_vip=False)
-    serializer = RideSerializer(ride)
-    return Response(serializer.data)
+    data = RideSerializer(ride).data
+    # Include driver phone numbers if site setting is enabled
+    site = SiteSettings.get()
+    if site.show_driver_phones and ride.assignments.exists():
+        data['driver_phones'] = [
+            {
+                'name': a.driver.name,
+                'phone': a.driver.phone or '',
+            }
+            for a in ride.assignments.select_related('driver').all()
+            if not a.has_departed
+        ]
+    return Response(data)
 
 
 @api_view(['POST'])
@@ -551,12 +563,43 @@ def _parse_datetime_flexible(value):
 
 class AdminRideViewSet(viewsets.ModelViewSet):
     """Admin CRUD for rides."""
-    queryset = Ride.objects.all().select_related('origin', 'destination').prefetch_related('assignments__driver', 'assignments__car')
     serializer_class = RideSerializer
     permission_classes = [IsAdmin]
 
+    def get_queryset(self):
+        """Include deleted rides when explicitly requested."""
+        if self.action == 'trash':
+            return Ride.all_objects.filter(is_deleted=True).select_related(
+                'origin', 'destination'
+            ).prefetch_related('assignments__driver', 'assignments__car')
+        if self.action == 'restore':
+            return Ride.all_objects.all().select_related(
+                'origin', 'destination'
+            ).prefetch_related('assignments__driver', 'assignments__car')
+        return Ride.objects.all().select_related(
+            'origin', 'destination'
+        ).prefetch_related('assignments__driver', 'assignments__car')
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        """Soft delete instead of hard delete."""
+        instance.soft_delete()
+
+    @action(detail=False, methods=['get'], url_path='trash')
+    def trash(self, request):
+        """List soft-deleted rides."""
+        rides = self.get_queryset()
+        serializer = RideSerializer(rides, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        """Restore a soft-deleted ride."""
+        ride = self.get_object()
+        ride.restore()
+        return Response(RideSerializer(ride).data)
 
     @action(detail=True, methods=['get'])
     def passengers(self, request, pk=None):
@@ -974,6 +1017,13 @@ class AdminTravelTimeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdmin]
 
 
+class AdminBlockedPeriodViewSet(viewsets.ModelViewSet):
+    """Admin CRUD for blocked time periods."""
+    queryset = BlockedPeriod.objects.all()
+    serializer_class = BlockedPeriodSerializer
+    permission_classes = [IsAdmin]
+
+
 class AdminDriverAvailabilityViewSet(viewsets.ModelViewSet):
     """Admin CRUD for driver availability schedules."""
     queryset = DriverAvailability.objects.all().select_related('driver')
@@ -1061,6 +1111,22 @@ def admin_driver_timeline(request):
     start = request.query_params.get('start')
     end = request.query_params.get('end')
 
+    # Fetch blocked periods for the range
+    blocked_qs = BlockedPeriod.objects.all()
+    if start:
+        blocked_qs = blocked_qs.filter(end_time__gte=start)
+    if end:
+        blocked_qs = blocked_qs.filter(start_time__lte=end)
+    blocked_periods = [
+        {
+            'id': bp.id,
+            'start_time': bp.start_time.isoformat(),
+            'end_time': bp.end_time.isoformat(),
+            'reason': bp.reason,
+        }
+        for bp in blocked_qs
+    ]
+
     result = []
     for driver in drivers:
         availabilities = DriverAvailability.objects.filter(driver=driver)
@@ -1104,7 +1170,10 @@ def admin_driver_timeline(request):
             ],
         })
 
-    return Response(result)
+    return Response({
+        'drivers': result,
+        'blocked_periods': blocked_periods,
+    })
 
 
 @api_view(['GET', 'PATCH'])
@@ -1118,6 +1187,7 @@ def admin_site_settings(request):
             'banner_text': site.banner_text,
             'google_routes_api_key': site.google_routes_api_key,
             'base_location_id': site.base_location_id,
+            'show_driver_phones': site.show_driver_phones,
         })
     # PATCH
     if 'banner_enabled' in request.data:
@@ -1129,12 +1199,84 @@ def admin_site_settings(request):
     if 'base_location_id' in request.data:
         val = request.data['base_location_id']
         site.base_location_id = int(val) if val else None
+    if 'show_driver_phones' in request.data:
+        site.show_driver_phones = bool(request.data['show_driver_phones'])
     site.save()
     return Response({
         'banner_enabled': site.banner_enabled,
         'banner_text': site.banner_text,
         'google_routes_api_key': site.google_routes_api_key,
         'base_location_id': site.base_location_id,
+        'show_driver_phones': site.show_driver_phones,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def admin_report_summary(request):
+    """Report showing driver hours and car km from departed rides."""
+    # Get all departed assignments
+    departed = RideAssignment.objects.filter(
+        has_departed=True
+    ).select_related('driver', 'car', 'ride__origin', 'ride__destination')
+
+    # Pre-load travel times
+    tt_minutes = {}
+    for tt in TravelTime.objects.all():
+        tt_minutes[(tt.origin_id, tt.destination_id)] = tt.minutes
+
+    # Driver hours: sum travel time for each departed assignment
+    driver_stats = defaultdict(lambda: {'name': '', 'email': '', 'total_minutes': 0, 'rides': 0})
+    for a in departed:
+        key = a.driver_id
+        minutes = tt_minutes.get((a.ride.origin_id, a.ride.destination_id), 0)
+        driver_stats[key]['name'] = a.driver.name
+        driver_stats[key]['email'] = a.driver.email
+        driver_stats[key]['total_minutes'] += minutes
+        driver_stats[key]['rides'] += 1
+
+    driver_report = sorted([
+        {
+            'driver_id': did,
+            'name': info['name'],
+            'email': info['email'],
+            'total_minutes': info['total_minutes'],
+            'total_hours': round(info['total_minutes'] / 60, 1),
+            'rides': info['rides'],
+        }
+        for did, info in driver_stats.items()
+    ], key=lambda x: x['name'])
+
+    # Car km: sum distance_meters for each departed assignment
+    car_stats = defaultdict(lambda: {'name': '', 'license_plate': '', 'total_meters': 0, 'rides': 0, 'missing': False})
+    for a in departed:
+        key = a.car_id
+        car_stats[key]['name'] = a.car.name
+        car_stats[key]['license_plate'] = a.car.license_plate
+        car_stats[key]['rides'] += 1
+        tt = TravelTime.objects.filter(
+            origin=a.ride.origin, destination=a.ride.destination
+        ).first()
+        if tt and tt.distance_meters is not None:
+            car_stats[key]['total_meters'] += tt.distance_meters
+        else:
+            car_stats[key]['missing'] = True
+
+    car_report = sorted([
+        {
+            'car_id': cid,
+            'name': info['name'],
+            'license_plate': info['license_plate'],
+            'total_km': round(info['total_meters'] / 1000, 1),
+            'rides': info['rides'],
+            'missing_distances': info['missing'],
+        }
+        for cid, info in car_stats.items()
+    ], key=lambda x: x['name'])
+
+    return Response({
+        'drivers': driver_report,
+        'cars': car_report,
     })
 
 

@@ -114,6 +114,8 @@ export function AdminDashboard() {
           <Link to="/admin/passengers" className="btn btn-primary">Passenger Overview</Link>
           <Link to="/admin/users" className="btn btn-primary">Manage Users</Link>
           <Link to="/admin/car-km" className="btn btn-secondary">Car KM Overview</Link>
+          <Link to="/admin/reports" className="btn btn-secondary">Time &amp; KM Report</Link>
+          <Link to="/admin/blocked-periods" className="btn btn-secondary">Blocked Periods</Link>
           <Link to="/admin/settings" className="btn btn-secondary">Site Settings</Link>
         </div>
       </div>
