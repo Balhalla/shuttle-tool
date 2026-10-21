@@ -163,6 +163,11 @@ body {
   width: 100%;
 }
 
+.main.main-wide {
+  max-width: none;
+  padding: 1.5rem;
+}
+
 /* Footer */
 .footer {
   background: #333;
@@ -837,6 +842,101 @@ body {
   color: #555;
 }
 
+.timeline-notifications {
+  position: fixed;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.timeline-notification {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid;
+  border-radius: 8px;
+  margin: 0;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  pointer-events: auto;
+  animation: timeline-notification-in 160ms ease-out;
+}
+
+.timeline-notification.error {
+  border-color: #f1aeb5;
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.timeline-notification.success {
+  border-color: #a3cfbb;
+  background: #d4edda;
+  color: #155724;
+}
+
+.timeline-notification-message {
+  flex: 1;
+}
+
+.timeline-notification button {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.65;
+}
+
+.timeline-notification button:hover {
+  opacity: 1;
+}
+
+.timeline-notification-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #2f7d48;
+  transform-origin: left;
+  animation: timeline-notification-countdown 5s linear forwards;
+}
+
+@keyframes timeline-notification-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes timeline-notification-countdown {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .timeline-container {
   border: 1px solid #dee2e6;
   border-radius: 8px;
@@ -866,9 +966,9 @@ body {
 
 .timeline-corner,
 .timeline-axis {
-  width: 140px;
-  min-width: 140px;
-  flex: 0 0 140px;
+  width: 110px;
+  min-width: 110px;
+  flex: 0 0 110px;
 }
 
 .timeline-corner {
@@ -882,9 +982,9 @@ body {
 }
 
 .timeline-driver-header {
-  flex: 1 1 240px;
-  min-width: 240px;
-  padding: 0.75rem;
+  flex: 1 1 150px;
+  min-width: 150px;
+  padding: 0.75rem 0.5rem;
   border-right: 1px solid #dee2e6;
   font-weight: 600;
   text-align: center;
@@ -900,10 +1000,10 @@ body {
 }
 
 .timeline-program-header {
-  width: 280px;
-  min-width: 280px;
-  flex: 0 0 280px;
-  padding: 0.75rem;
+  width: 220px;
+  min-width: 220px;
+  flex: 0 0 220px;
+  padding: 0.75rem 0.5rem;
   border-right: 1px solid #dee2e6;
   background: #f3e8ff;
   color: #5b21b6;
@@ -924,17 +1024,45 @@ body {
   background: #fdfdfd;
 }
 
+.timeline-day-band {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 0;
+  border-top: 2px solid #9ca3af;
+  pointer-events: none;
+}
+
+.timeline-day-band.alternate {
+  background: rgba(43, 108, 176, 0.045);
+}
+
+.timeline-day-label {
+  position: absolute;
+  top: 1.15rem;
+  left: 0.4rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #4b5563;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .timeline-track {
-  flex: 1 1 240px;
-  min-width: 240px;
+  flex: 1 1 150px;
+  min-width: 150px;
   position: relative;
   border-right: 1px solid #eee;
 }
 
 .timeline-track.program-track {
-  width: 280px;
-  min-width: 280px;
-  flex: 0 0 280px;
+  width: 220px;
+  min-width: 220px;
+  flex: 0 0 220px;
   background: rgba(124, 58, 237, 0.035);
   border-right: 2px solid #d8b4fe;
   cursor: context-menu;
@@ -1169,6 +1297,13 @@ body {
 
 .timeline-block.assignment.draggable-assignment:active {
   cursor: grabbing;
+}
+
+.timeline-block.assignment.same-ride-highlight {
+  z-index: 6;
+  outline: 3px solid #f59e0b;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.2);
 }
 
 .timeline-block.assignment:hover {
@@ -1722,6 +1857,10 @@ body {
     padding: 1rem;
   }
 
+  .main.main-wide {
+    padding: 1rem;
+  }
+
   /* Hide duplicate nav styles (hamburger menu handles this) */
   .nav {
     flex-direction: row;
@@ -1971,6 +2110,10 @@ body {
 /* Extra small screens */
 @media (max-width: 480px) {
   .main {
+    padding: 0.75rem;
+  }
+
+  .main.main-wide {
     padding: 0.75rem;
   }
 

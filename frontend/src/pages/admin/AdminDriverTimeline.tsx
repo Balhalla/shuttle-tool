@@ -10,10 +10,106 @@ type DraggedRideAssignment = {
   sourceDriverId: number;
 };
 
-const PROGRAM_TRACK_WIDTH = 280;
+type TimelineNotificationsProps = {
+  error: string;
+  notice: string;
+  onDismissError: () => void;
+  onDismissNotice: () => void;
+};
+
+type TimelineDaySection = {
+  index: number;
+  top: number;
+  height: number;
+  label: string;
+};
+
+const TIME_AXIS_WIDTH = 110;
+const PROGRAM_TRACK_WIDTH = 220;
+const DRIVER_TRACK_WIDTH = 150;
 const PROGRAM_CLICK_INCREMENT_MS = 15 * 60 * 1000;
 const PROGRAM_DRAG_TYPE = 'application/x-shuttle-program-item';
 const RIDE_ASSIGNMENT_DRAG_TYPE = 'application/x-shuttle-ride-assignment';
+
+function TimelineNotifications({
+  error,
+  notice,
+  onDismissError,
+  onDismissNotice,
+}: TimelineNotificationsProps) {
+  if (!error && !notice) return null;
+
+  return (
+    <div className="timeline-notifications" aria-live="polite">
+      {error && (
+        <div className="timeline-notification error" role="alert">
+          <span className="timeline-notification-message">{error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={onDismissError}>
+            ×
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="timeline-notification success" role="status">
+          <span className="timeline-notification-message">{notice}</span>
+          <button type="button" aria-label="Dismiss notification" onClick={onDismissNotice}>
+            ×
+          </button>
+          <span className="timeline-notification-progress" aria-hidden="true" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineDayBands({
+  sections,
+  showLabels = false,
+}: {
+  sections: TimelineDaySection[];
+  showLabels?: boolean;
+}) {
+  return sections.map((section) => (
+    <div
+      key={`day-band-${section.index}`}
+      className={`timeline-day-band${section.index % 2 === 1 ? ' alternate' : ''}`}
+      style={{ top: `${section.top}%`, height: `${section.height}%` }}
+    >
+      {showLabels && (
+        <span className="timeline-day-label">{section.label}</span>
+      )}
+    </div>
+  ));
+}
+
+function buildTimelineDaySections(startMs: number, endMs: number) {
+  const sections: TimelineDaySection[] = [];
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return sections;
+  }
+
+  let dayStart = new Date(startMs);
+  let index = 0;
+  while (dayStart.getTime() < endMs) {
+    const nextDay = new Date(dayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const dayEndMs = Math.min(nextDay.getTime(), endMs);
+    sections.push({
+      index,
+      top: ((dayStart.getTime() - startMs) / (endMs - startMs)) * 100,
+      height: ((dayEndMs - dayStart.getTime()) / (endMs - startMs)) * 100,
+      label: dayStart.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      }),
+    });
+    dayStart = nextDay;
+    index += 1;
+  }
+
+  return sections;
+}
 
 function formatDateTimeLocal(value: string | Date) {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -118,6 +214,7 @@ export function AdminDriverTimeline() {
   const [draggedRideAssignment, setDraggedRideAssignment] = useState<DraggedRideAssignment | null>(null);
   const [dragOverRideAction, setDragOverRideAction] = useState<'move' | 'add'>('move');
   const [savingRideDriverId, setSavingRideDriverId] = useState<number | null>(null);
+  const [hoveredRideId, setHoveredRideId] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -135,6 +232,12 @@ export function AdminDriverTimeline() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   const loadData = async () => {
     try {
@@ -369,7 +472,8 @@ export function AdminDriverTimeline() {
     ? Math.max(1, Math.round(totalMs / (24 * 60 * 60 * 1000)))
     : 1;
   const timelineHeight = Math.max(1440, Math.min(10080, remainingDayCount * 1440));
-  const timelineMinWidth = `${140 + PROGRAM_TRACK_WIDTH + data.length * 240}px`;
+  const timelineMinWidth = `${TIME_AXIS_WIDTH + PROGRAM_TRACK_WIDTH + data.length * DRIVER_TRACK_WIDTH}px`;
+  const daySections = buildTimelineDaySections(startMs, endMs);
 
   const toPercent = (dateStr: string) => {
     const ms = new Date(dateStr).getTime();
@@ -542,10 +646,15 @@ export function AdminDriverTimeline() {
   if (!timelineRange) {
     return (
       <div className="admin-driver-timeline">
+        <TimelineNotifications
+          error={error}
+          notice={notice}
+          onDismissError={() => setError('')}
+          onDismissNotice={() => setNotice('')}
+        />
         <div className="page-header">
           <h1>Driver &amp; Festival Timeline</h1>
         </div>
-        {error && <div className="error">{error}</div>}
         {!error && (
           <div className="timeline-no-dates">
             All festival dates have passed. Update the festival dates in Site Settings
@@ -558,15 +667,18 @@ export function AdminDriverTimeline() {
 
   return (
     <div className="admin-driver-timeline">
+      <TimelineNotifications
+        error={error}
+        notice={notice}
+        onDismissError={() => setError('')}
+        onDismissNotice={() => setNotice('')}
+      />
       <div className="page-header">
         <h1>Driver &amp; Festival Timeline</h1>
         <button type="button" className="btn btn-primary" onClick={() => openCreateProgramForm()}>
           Add Program Item
         </button>
       </div>
-
-      {error && <div className="error">{error}</div>}
-      {notice && <div className="success">{notice}</div>}
 
       <div className="timeline-controls">
         <div className="timeline-festival-summary">
@@ -700,6 +812,7 @@ export function AdminDriverTimeline() {
           >
             {/* Vertical time axis */}
             <div className="timeline-axis">
+              <TimelineDayBands sections={daySections} showLabels />
               {guidelines.map((time, i) => (
                 <div
                   key={`axis-guideline-${i}`}
@@ -723,6 +836,7 @@ export function AdminDriverTimeline() {
               className="timeline-track program-track"
               onContextMenu={handleProgramContextMenu}
             >
+              <TimelineDayBands sections={daySections} />
               {guidelines.map((time, i) => (
                 <div
                   key={`program-grid-${i}`}
@@ -800,6 +914,7 @@ export function AdminDriverTimeline() {
                       )}
                   </div>
                 )}
+                <TimelineDayBands sections={daySections} />
                 {guidelines.map((time, i) => (
                   <div
                     key={`grid-${i}`}
@@ -868,11 +983,15 @@ export function AdminDriverTimeline() {
                     <button
                       type="button"
                       key={`assign-${assign.id}`}
-                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}`}
+                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}${hoveredRideId === assign.ride_id ? ' same-ride-highlight' : ''}`}
                       draggable={!assign.has_departed}
                       style={{ top: `${top}%` }}
                       title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
                       onClick={() => navigate(`/admin/rides/${assign.ride_id}/passengers`)}
+                      onMouseEnter={() => setHoveredRideId(assign.ride_id)}
+                      onMouseLeave={() => setHoveredRideId(null)}
+                      onFocus={() => setHoveredRideId(assign.ride_id)}
+                      onBlur={() => setHoveredRideId(null)}
                       onDragStart={(event) => handleAssignmentDragStart(
                         event,
                         assign,

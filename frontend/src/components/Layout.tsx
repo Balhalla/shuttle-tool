@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 
@@ -7,7 +7,9 @@ export function Layout() {
   const { user, logout } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const useWideLayout = pathname.startsWith('/admin/driver-timeline');
 
   const handleLogout = async () => {
     await logout();
@@ -58,7 +60,7 @@ export function Layout() {
       {config?.banner_enabled && config?.banner_text && (
         <div className="site-banner">{config.banner_text}</div>
       )}
-      <main className="main">
+      <main className={`main${useWideLayout ? ' main-wide' : ''}`}>
         <Outlet />
       </main>
     </div>
