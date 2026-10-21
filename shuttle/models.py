@@ -2,7 +2,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from datetime import time, timedelta
+from datetime import date, time, timedelta
 
 
 class Car(models.Model):
@@ -285,6 +285,8 @@ class SiteSettings(models.Model):
     """Singleton model for site-wide settings."""
     banner_enabled = models.BooleanField(default=False)
     banner_text = models.TextField(blank=True, default='')
+    festival_start_date = models.DateField(default=date(2027, 2, 26))
+    festival_end_date = models.DateField(default=date(2027, 2, 28))
     day_change_time = models.TimeField(
         default=time(6, 0),
         help_text='Time at which the operational day changes',

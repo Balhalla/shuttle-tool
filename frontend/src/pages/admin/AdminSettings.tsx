@@ -7,6 +7,8 @@ export function AdminSettings() {
   const { refreshConfig } = useConfig();
   const [bannerEnabled, setBannerEnabled] = useState(false);
   const [bannerText, setBannerText] = useState('');
+  const [festivalStartDate, setFestivalStartDate] = useState('2027-02-26');
+  const [festivalEndDate, setFestivalEndDate] = useState('2027-02-28');
   const [dayChangeTime, setDayChangeTime] = useState('06:00');
   const [googleRoutesApiKey, setGoogleRoutesApiKey] = useState('');
   const [baseLocationId, setBaseLocationId] = useState<number | null>(null);
@@ -22,6 +24,8 @@ export function AdminSettings() {
       .then(([data, locs]) => {
         setBannerEnabled(data.banner_enabled);
         setBannerText(data.banner_text);
+        setFestivalStartDate(data.festival_start_date);
+        setFestivalEndDate(data.festival_end_date);
         setDayChangeTime(data.day_change_time);
         setGoogleRoutesApiKey(data.google_routes_api_key);
         setBaseLocationId(data.base_location_id);
@@ -35,10 +39,17 @@ export function AdminSettings() {
   const handleSave = async () => {
     setSaving(true);
     setMessage('');
+    if (!festivalStartDate || !festivalEndDate || festivalStartDate > festivalEndDate) {
+      setMessage('Festival end date must be on or after the start date.');
+      setSaving(false);
+      return;
+    }
     try {
       const data = await api.adminUpdateSiteSettings({
         banner_enabled: bannerEnabled,
         banner_text: bannerText,
+        festival_start_date: festivalStartDate,
+        festival_end_date: festivalEndDate,
         day_change_time: dayChangeTime,
         google_routes_api_key: googleRoutesApiKey,
         base_location_id: baseLocationId,
@@ -46,6 +57,8 @@ export function AdminSettings() {
       });
       setBannerEnabled(data.banner_enabled);
       setBannerText(data.banner_text);
+      setFestivalStartDate(data.festival_start_date);
+      setFestivalEndDate(data.festival_end_date);
       setDayChangeTime(data.day_change_time);
       setGoogleRoutesApiKey(data.google_routes_api_key);
       setBaseLocationId(data.base_location_id);
@@ -97,6 +110,32 @@ export function AdminSettings() {
             Preview: {bannerText}
           </div>
         )}
+
+        <h2>Festival Dates</h2>
+        <div className="form-group">
+          <label htmlFor="festival-start-date">First day</label>
+          <input
+            id="festival-start-date"
+            type="date"
+            value={festivalStartDate}
+            onChange={(e) => setFestivalStartDate(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="festival-end-date">Last day</label>
+          <input
+            id="festival-end-date"
+            type="date"
+            min={festivalStartDate}
+            value={festivalEndDate}
+            onChange={(e) => setFestivalEndDate(e.target.value)}
+            required
+          />
+          <small style={{ color: '#666', display: 'block' }}>
+            The timeline shows every festival date that has not passed yet.
+          </small>
+        </div>
 
         <h2>Day Boundary</h2>
         <div className="form-group">

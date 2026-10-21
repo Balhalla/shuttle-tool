@@ -5,7 +5,7 @@ import secrets
 import urllib.request
 import json as json_module
 from collections import defaultdict
-from datetime import timedelta, datetime
+from datetime import date, timedelta, datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -547,7 +547,7 @@ def _parse_datetime_flexible(value):
     if not value:
         return None
 
-    # Try ISO format first (e.g., 2026-07-15T22:00:00, 2026-07-15T22:00)
+    # Try ISO format first (e.g., 2027-02-26T22:00:00, 2027-02-26T22:00)
     dt = django_parse_datetime(value)
     if dt:
         if timezone.is_naive(dt):
@@ -761,10 +761,34 @@ class AdminRideViewSet(viewsets.ModelViewSet):
         serializer = RideAssignmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        driver = User.objects.filter(
+            id=serializer.validated_data['driver_id'],
+            role__in=['driver', 'admin'],
+        ).first()
+        if not driver:
+            return Response(
+                {'error': 'Driver not found'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ride.assignments.filter(driver=driver).exists():
+            return Response(
+                {'error': f'{driver.name} is already assigned to this ride'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        car_id = serializer.validated_data.get('car_id')
+        if car_id is None:
+            if not driver.default_car_id:
+                return Response(
+                    {'error': f'{driver.name} does not have a default car'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            car_id = driver.default_car_id
+
         assignment = RideAssignment.objects.create(
             ride=ride,
-            driver_id=serializer.validated_data['driver_id'],
-            car_id=serializer.validated_data['car_id']
+            driver=driver,
+            car_id=car_id,
         )
 
         return Response(
@@ -772,19 +796,57 @@ class AdminRideViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED
         )
 
-    @action(detail=True, methods=['delete'], url_path='assignments/(?P<assignment_id>[^/.]+)')
+    @action(
+        detail=True,
+        methods=['delete', 'patch'],
+        url_path='assignments/(?P<assignment_id>[^/.]+)',
+    )
     def remove_assignment(self, request, pk=None, assignment_id=None):
-        """Remove a driver+car assignment from a ride."""
+        """Remove an assignment or move it to another driver's default car."""
         ride = self.get_object()
         try:
             assignment = ride.assignments.get(id=assignment_id)
-            assignment.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
         except RideAssignment.DoesNotExist:
             return Response(
                 {'error': 'Assignment not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        if request.method == 'DELETE':
+            assignment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if assignment.has_departed:
+            return Response(
+                {'error': 'Departed assignments cannot be moved to another driver'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        driver_id = request.data.get('driver_id')
+        driver = User.objects.filter(
+            id=driver_id,
+            role__in=['driver', 'admin'],
+        ).first()
+        if not driver:
+            return Response(
+                {'error': 'Driver not found'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not driver.default_car_id:
+            return Response(
+                {'error': f'{driver.name} does not have a default car'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ride.assignments.exclude(id=assignment.id).filter(driver=driver).exists():
+            return Response(
+                {'error': f'{driver.name} is already assigned to this ride'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignment.driver = driver
+        assignment.car_id = driver.default_car_id
+        assignment.save(update_fields=['driver', 'car'])
+        return Response(RideAssignmentSerializer(assignment).data)
 
     @action(detail=True, methods=['post'], url_path='assignments/(?P<assignment_id>[^/.]+)/undepart')
     def undepart_assignment(self, request, pk=None, assignment_id=None):
@@ -1133,19 +1195,41 @@ def admin_passenger_list(request):
 @api_view(['GET'])
 @permission_classes([IsAdmin])
 def admin_driver_timeline(request):
-    """Get driver availability, rides, and festival program for the timeline."""
+    """Get the remaining festival days with driver and program data."""
+    site = SiteSettings.get()
+    local_now = timezone.localtime()
+    operational_date = local_now.date()
+    if local_now.time() < site.day_change_time:
+        operational_date -= timedelta(days=1)
+
+    first_visible_date = max(site.festival_start_date, operational_date)
+    if first_visible_date > site.festival_end_date:
+        return Response({
+            'drivers': [],
+            'program_items': [],
+            'range': None,
+        })
+
+    current_timezone = timezone.get_current_timezone()
+    start = timezone.make_aware(
+        datetime.combine(first_visible_date, site.day_change_time),
+        current_timezone,
+    )
+    end = timezone.make_aware(
+        datetime.combine(
+            site.festival_end_date + timedelta(days=1),
+            site.day_change_time,
+        ),
+        current_timezone,
+    )
+
     drivers = User.objects.filter(Q(role='driver') | Q(role='admin')).order_by('name')
 
-    # Optional date range filters
-    start = request.query_params.get('start')
-    end = request.query_params.get('end')
-
     # Fetch blocked periods for the range
-    blocked_qs = BlockedPeriod.objects.select_related('driver').all()
-    if start:
-        blocked_qs = blocked_qs.filter(end_time__gte=start)
-    if end:
-        blocked_qs = blocked_qs.filter(start_time__lte=end)
+    blocked_qs = BlockedPeriod.objects.select_related('driver').filter(
+        end_time__gte=start,
+        start_time__lt=end,
+    )
     # Index by driver id for per-driver lookup
     blocked_by_driver: dict[int, list] = {}
     for bp in blocked_qs:
@@ -1156,11 +1240,10 @@ def admin_driver_timeline(request):
             'reason': bp.reason,
         })
 
-    program_qs = FestivalProgramItem.objects.all()
-    if start:
-        program_qs = program_qs.filter(end_time__gte=start)
-    if end:
-        program_qs = program_qs.filter(start_time__lte=end)
+    program_qs = FestivalProgramItem.objects.filter(
+        end_time__gte=start,
+        start_time__lt=end,
+    )
 
     result = []
     for driver in drivers:
@@ -1169,12 +1252,14 @@ def admin_driver_timeline(request):
             'ride__origin', 'ride__destination', 'car'
         )
 
-        if start:
-            availabilities = availabilities.filter(end_time__gte=start)
-            assignments = assignments.filter(ride__departure_time__gte=start)
-        if end:
-            availabilities = availabilities.filter(start_time__lte=end)
-            assignments = assignments.filter(ride__departure_time__lte=end)
+        availabilities = availabilities.filter(
+            end_time__gte=start,
+            start_time__lt=end,
+        )
+        assignments = assignments.filter(
+            ride__departure_time__gte=start,
+            ride__departure_time__lt=end,
+        )
 
         result.append({
             'driver': {
@@ -1209,6 +1294,10 @@ def admin_driver_timeline(request):
     return Response({
         'drivers': result,
         'program_items': FestivalProgramItemSerializer(program_qs, many=True).data,
+        'range': {
+            'start': start.isoformat(),
+            'end': end.isoformat(),
+        },
     })
 
 
@@ -1221,6 +1310,8 @@ def admin_site_settings(request):
         return Response({
             'banner_enabled': site.banner_enabled,
             'banner_text': site.banner_text,
+            'festival_start_date': site.festival_start_date.isoformat(),
+            'festival_end_date': site.festival_end_date.isoformat(),
             'day_change_time': site.day_change_time.strftime('%H:%M'),
             'google_routes_api_key': site.google_routes_api_key,
             'base_location_id': site.base_location_id,
@@ -1231,6 +1322,31 @@ def admin_site_settings(request):
         site.banner_enabled = bool(request.data['banner_enabled'])
     if 'banner_text' in request.data:
         site.banner_text = request.data['banner_text']
+    if 'festival_start_date' in request.data:
+        try:
+            site.festival_start_date = date.fromisoformat(
+                str(request.data['festival_start_date'])
+            )
+        except ValueError:
+            return Response(
+                {'error': 'festival_start_date must use YYYY-MM-DD format'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    if 'festival_end_date' in request.data:
+        try:
+            site.festival_end_date = date.fromisoformat(
+                str(request.data['festival_end_date'])
+            )
+        except ValueError:
+            return Response(
+                {'error': 'festival_end_date must use YYYY-MM-DD format'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    if site.festival_end_date < site.festival_start_date:
+        return Response(
+            {'error': 'festival_end_date must be on or after festival_start_date'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     if 'day_change_time' in request.data:
         raw_day_change_time = str(request.data['day_change_time'])
         try:
@@ -1251,6 +1367,8 @@ def admin_site_settings(request):
     return Response({
         'banner_enabled': site.banner_enabled,
         'banner_text': site.banner_text,
+        'festival_start_date': site.festival_start_date.isoformat(),
+        'festival_end_date': site.festival_end_date.isoformat(),
         'day_change_time': site.day_change_time.strftime('%H:%M'),
         'google_routes_api_key': site.google_routes_api_key,
         'base_location_id': site.base_location_id,

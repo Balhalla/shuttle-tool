@@ -3,27 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { DriverTimeline, FestivalProgramItem } from '../../types';
 
+type TimelineBlockedPeriod = DriverTimeline['blocked_periods'][number];
+type TimelineAssignment = DriverTimeline['assignments'][number];
+type DraggedRideAssignment = {
+  assignment: TimelineAssignment;
+  sourceDriverId: number;
+};
+
 const PROGRAM_TRACK_WIDTH = 280;
 const PROGRAM_CLICK_INCREMENT_MS = 15 * 60 * 1000;
-
-function formatDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateInput(value: string) {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function dateAtDayChange(value: string, dayChangeTime: string) {
-  const date = parseDateInput(value);
-  const [hours, minutes] = dayChangeTime.split(':').map(Number);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
-}
+const PROGRAM_DRAG_TYPE = 'application/x-shuttle-program-item';
+const RIDE_ASSIGNMENT_DRAG_TYPE = 'application/x-shuttle-ride-assignment';
 
 function formatDateTimeLocal(value: string | Date) {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -105,6 +95,7 @@ export function AdminDriverTimeline() {
   const [programItems, setProgramItems] = useState<FestivalProgramItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [formError, setFormError] = useState('');
   const [showProgramForm, setShowProgramForm] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState<number | null>(null);
@@ -116,49 +107,40 @@ export function AdminDriverTimeline() {
     end_time: '',
   });
   const [dayChangeTime, setDayChangeTime] = useState('06:00');
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-
-  // Default to today ± 1 day
-  const today = new Date();
-  const defaultStart = new Date(today);
-  defaultStart.setDate(defaultStart.getDate() - 1);
-  const defaultEnd = new Date(today);
-  defaultEnd.setDate(defaultEnd.getDate() + 2);
-
-  const [rangeStart, setRangeStart] = useState(formatDateInput(defaultStart));
-  const [rangeEnd, setRangeEnd] = useState(formatDateInput(defaultEnd));
+  const [timelineRange, setTimelineRange] = useState<{
+    start: string;
+    end: string;
+  } | null>(null);
+  const [draggedProgramItemId, setDraggedProgramItemId] = useState<number | null>(null);
+  const [dragOverDriverId, setDragOverDriverId] = useState<number | null>(null);
+  const [savingBlockDriverId, setSavingBlockDriverId] = useState<number | null>(null);
+  const [deletingBlockedPeriodId, setDeletingBlockedPeriodId] = useState<number | null>(null);
+  const [draggedRideAssignment, setDraggedRideAssignment] = useState<DraggedRideAssignment | null>(null);
+  const [dragOverRideAction, setDragOverRideAction] = useState<'move' | 'add'>('move');
+  const [savingRideDriverId, setSavingRideDriverId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.adminGetSiteSettings()
-      .then((settings) => setDayChangeTime(settings.day_change_time || '06:00'))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load settings'))
-      .finally(() => setSettingsLoaded(true));
+    Promise.all([
+      api.adminGetSiteSettings(),
+      api.adminGetDriverTimeline(),
+    ])
+      .then(([settings, timeline]) => {
+        setDayChangeTime(settings.day_change_time || '06:00');
+        setTimelineRange(timeline.range);
+        setData(timeline.drivers);
+        setProgramItems(timeline.program_items || []);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load timeline');
+      })
+      .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (settingsLoaded) loadData();
-  }, [rangeStart, rangeEnd, dayChangeTime, settingsLoaded]);
 
   const loadData = async () => {
     try {
       setError('');
-      if (!rangeStart || !rangeEnd) return;
-
-      const selectedStart = dateAtDayChange(rangeStart, dayChangeTime);
-      const selectedEnd = dateAtDayChange(rangeEnd, dayChangeTime);
-      const dayAfterEnd = new Date(selectedEnd);
-      dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
-
-      if (dayAfterEnd <= selectedStart) {
-        setData([]);
-        setError('End date must be on or after the start date.');
-        return;
-      }
-
-      const result = await api.adminGetDriverTimeline({
-        start: selectedStart.toISOString(),
-        end: dayAfterEnd.toISOString(),
-      });
+      const result = await api.adminGetDriverTimeline();
+      setTimelineRange(result.range);
       setData(result.drivers);
       setProgramItems(result.program_items || []);
     } catch (err) {
@@ -168,15 +150,225 @@ export function AdminDriverTimeline() {
     }
   };
 
-  const startMs = dateAtDayChange(rangeStart, dayChangeTime).getTime();
-  const endDate = dateAtDayChange(rangeEnd, dayChangeTime);
-  endDate.setDate(endDate.getDate() + 1);
-  const endMs = endDate.getTime();
+  const draggedProgramItem = programItems.find(
+    (item) => item.id === draggedProgramItemId,
+  );
+
+  const handleProgramDragStart = (
+    event: React.DragEvent<HTMLButtonElement>,
+    item: FestivalProgramItem,
+  ) => {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData(PROGRAM_DRAG_TYPE, String(item.id));
+    event.dataTransfer.setData('text/plain', item.title);
+    setDraggedProgramItemId(item.id);
+    setDraggedRideAssignment(null);
+    setNotice('');
+  };
+
+  const handleProgramDragEnd = () => {
+    setDraggedProgramItemId(null);
+    setDragOverDriverId(null);
+  };
+
+  const handleAssignmentDragStart = (
+    event: React.DragEvent<HTMLButtonElement>,
+    assignment: TimelineAssignment,
+    sourceDriverId: number,
+  ) => {
+    event.dataTransfer.effectAllowed = 'copyMove';
+    event.dataTransfer.setData(
+      RIDE_ASSIGNMENT_DRAG_TYPE,
+      `${sourceDriverId}:${assignment.id}`,
+    );
+    event.dataTransfer.setData(
+      'text/plain',
+      `ride:${sourceDriverId}:${assignment.id}`,
+    );
+    setDraggedProgramItemId(null);
+    setDraggedRideAssignment({ assignment, sourceDriverId });
+    setNotice('');
+  };
+
+  const handleAssignmentDragEnd = () => {
+    setDraggedRideAssignment(null);
+    setDragOverDriverId(null);
+  };
+
+  const handleDriverDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+    driverId: number,
+  ) => {
+    const dragTypes = Array.from(event.dataTransfer.types);
+    const isRideDrag = Boolean(
+      draggedRideAssignment || dragTypes.includes(RIDE_ASSIGNMENT_DRAG_TYPE),
+    );
+    const isProgramDrag = Boolean(
+      draggedProgramItem
+      || dragTypes.includes(PROGRAM_DRAG_TYPE),
+    );
+    if (!isRideDrag && !isProgramDrag) return;
+
+    event.preventDefault();
+    const addMode = Boolean(isRideDrag && event.ctrlKey);
+    event.dataTransfer.dropEffect = isRideDrag ? (addMode ? 'copy' : 'move') : 'copy';
+    setDragOverDriverId(driverId);
+    setDragOverRideAction(addMode ? 'add' : 'move');
+  };
+
+  const handleDriverDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setDragOverDriverId(null);
+  };
+
+  const handleProgramDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+    driverId: number,
+  ) => {
+    const rawId = event.dataTransfer.getData(PROGRAM_DRAG_TYPE);
+    const item = programItems.find(
+      (programItem) => programItem.id === Number(rawId),
+    ) ?? draggedProgramItem;
+    const driver = data.find((entry) => entry.driver.id === driverId);
+    if (!item || !driver) return;
+
+    const startMs = new Date(item.start_time).getTime();
+    const endMs = new Date(item.end_time).getTime();
+    const alreadyBlocked = driver.blocked_periods.some(
+      (blockedPeriod) => (
+        blockedPeriod.reason === item.title
+        && new Date(blockedPeriod.start_time).getTime() === startMs
+        && new Date(blockedPeriod.end_time).getTime() === endMs
+      ),
+    );
+    if (alreadyBlocked) {
+      setNotice(`${item.title} is already blocked for ${driver.driver.name}.`);
+      return;
+    }
+
+    setSavingBlockDriverId(driverId);
+    setError('');
+    setNotice('');
+    try {
+      await api.adminCreateBlockedPeriod({
+        driver_id: driverId,
+        start_time: item.start_time,
+        end_time: item.end_time,
+        reason: item.title,
+      });
+      await loadData();
+      setNotice(`Blocked ${driver.driver.name} for ${item.title}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to block driver time');
+    } finally {
+      setSavingBlockDriverId(null);
+      setDraggedProgramItemId(null);
+    }
+  };
+
+  const handleAssignmentDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+    driverId: number,
+  ) => {
+    const plainText = event.dataTransfer.getData('text/plain');
+    const rawAssignment = event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
+      || (plainText.startsWith('ride:') ? plainText.slice(5) : '');
+    const [rawSourceDriverId, rawAssignmentId] = rawAssignment.split(':').map(Number);
+    const sourceDriver = data.find((entry) => entry.driver.id === rawSourceDriverId);
+    const assignment = draggedRideAssignment?.assignment
+      ?? sourceDriver?.assignments.find((entry) => entry.id === rawAssignmentId);
+    const targetDriver = data.find((entry) => entry.driver.id === driverId);
+    const addMode = event.ctrlKey;
+    if (!assignment || !targetDriver) {
+      setError('Could not identify the dropped ride assignment.');
+      return;
+    }
+
+    const sourceDriverId = draggedRideAssignment?.sourceDriverId ?? rawSourceDriverId;
+    if (sourceDriverId === driverId) {
+      setNotice(`This ride is already assigned to ${targetDriver.driver.name}.`);
+      return;
+    }
+    if (targetDriver.assignments.some((entry) => entry.ride_id === assignment.ride_id)) {
+      setNotice(`${targetDriver.driver.name} is already assigned to this ride.`);
+      return;
+    }
+
+    setSavingRideDriverId(driverId);
+    setError('');
+    setNotice('');
+    try {
+      if (addMode) {
+        await api.adminAddRideAssignment(assignment.ride_id, driverId);
+      } else {
+        await api.adminReassignRideAssignment(
+          assignment.ride_id,
+          assignment.id,
+          driverId,
+        );
+      }
+      await loadData();
+      setNotice(
+        addMode
+          ? `Added ${targetDriver.driver.name} and their default car to the ride.`
+          : `Moved the ride to ${targetDriver.driver.name} and their default car.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update ride assignment');
+    } finally {
+      setSavingRideDriverId(null);
+      setDraggedRideAssignment(null);
+    }
+  };
+
+  const handleDriverDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+    driverId: number,
+  ) => {
+    event.preventDefault();
+    setDragOverDriverId(null);
+    const plainText = event.dataTransfer.getData('text/plain');
+    if (
+      draggedRideAssignment
+      || event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
+      || plainText.startsWith('ride:')
+    ) {
+      await handleAssignmentDrop(event, driverId);
+      return;
+    }
+    await handleProgramDrop(event, driverId);
+  };
+
+  const handleBlockedPeriodRemove = async (
+    blockedPeriod: TimelineBlockedPeriod,
+    driverName: string,
+  ) => {
+    if (!confirm(`Remove the blocked period "${blockedPeriod.reason || 'Blocked'}" from ${driverName}?`)) {
+      return;
+    }
+
+    setDeletingBlockedPeriodId(blockedPeriod.id);
+    setError('');
+    setNotice('');
+    try {
+      await api.adminDeleteBlockedPeriod(blockedPeriod.id);
+      await loadData();
+      setNotice(`Removed the blocked period from ${driverName}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove blocked period');
+    } finally {
+      setDeletingBlockedPeriodId(null);
+    }
+  };
+
+  const startMs = timelineRange ? new Date(timelineRange.start).getTime() : 0;
+  const endMs = timelineRange ? new Date(timelineRange.end).getTime() : 0;
   const totalMs = endMs - startMs;
-  const selectedDayCount = Number.isFinite(totalMs)
-    ? Math.max(1, Math.ceil(totalMs / (24 * 60 * 60 * 1000)))
+  const remainingDayCount = timelineRange && Number.isFinite(totalMs)
+    ? Math.max(1, Math.round(totalMs / (24 * 60 * 60 * 1000)))
     : 1;
-  const timelineHeight = Math.max(1440, Math.min(10080, selectedDayCount * 1440));
+  const timelineHeight = Math.max(1440, Math.min(10080, remainingDayCount * 1440));
   const timelineMinWidth = `${140 + PROGRAM_TRACK_WIDTH + data.length * 240}px`;
 
   const toPercent = (dateStr: string) => {
@@ -202,6 +394,21 @@ export function AdminDriverTimeline() {
     });
   };
 
+  const formatFestivalDate = (date: Date) => {
+    return date.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const firstVisibleDate = timelineRange ? new Date(timelineRange.start) : null;
+  const lastVisibleDate = timelineRange ? new Date(timelineRange.end) : null;
+  if (lastVisibleDate) {
+    lastVisibleDate.setDate(lastVisibleDate.getDate() - 1);
+  }
+
   // Generate time markers
   const markers: Date[] = [];
   const markerInterval = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 8))); // ~8 markers
@@ -226,7 +433,7 @@ export function AdminDriverTimeline() {
   const openCreateProgramForm = (selectedStart?: Date) => {
     const start = selectedStart
       ? new Date(selectedStart)
-      : dateAtDayChange(rangeStart, dayChangeTime);
+      : new Date(timelineRange?.start ?? Date.now());
     if (!selectedStart) start.setHours(18, 0, 0, 0);
     const end = new Date(start);
     end.setHours(end.getHours() + 1);
@@ -332,6 +539,23 @@ export function AdminDriverTimeline() {
     return <div className="loading">Loading timeline...</div>;
   }
 
+  if (!timelineRange) {
+    return (
+      <div className="admin-driver-timeline">
+        <div className="page-header">
+          <h1>Driver &amp; Festival Timeline</h1>
+        </div>
+        {error && <div className="error">{error}</div>}
+        {!error && (
+          <div className="timeline-no-dates">
+            All festival dates have passed. Update the festival dates in Site Settings
+            to show an upcoming festival.
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="admin-driver-timeline">
       <div className="page-header">
@@ -342,31 +566,23 @@ export function AdminDriverTimeline() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {notice && <div className="success">{notice}</div>}
 
       <div className="timeline-controls">
-        <div className="form-group">
-          <label htmlFor="range-start">From</label>
-          <input
-            id="range-start"
-            type="date"
-            value={rangeStart}
-            onChange={(e) => setRangeStart(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="range-end">To</label>
-          <input
-            id="range-end"
-            type="date"
-            value={rangeEnd}
-            onChange={(e) => setRangeEnd(e.target.value)}
-          />
+        <div className="timeline-festival-summary">
+          <strong>Remaining festival dates</strong>
+          <span>
+            {firstVisibleDate && lastVisibleDate
+              ? `${formatFestivalDate(firstVisibleDate)} – ${formatFestivalDate(lastVisibleDate)} (${remainingDayCount} ${remainingDayCount === 1 ? 'day' : 'days'})`
+              : 'No upcoming dates'}
+          </span>
         </div>
         <small className="timeline-day-boundary">
-          Each selected day runs from {dayChangeTime} until {dayChangeTime} the following day.
+          Each festival day runs from {dayChangeTime} until {dayChangeTime} the following day.
         </small>
         <small className="timeline-program-hint">
-          Right-click the Festival program lane to add an item at that time.
+          Drag a program item to block a driver. Drag a ride to reassign it, or
+          Ctrl-drag to add the driver. Right-click the program lane to add an item.
         </small>
       </div>
 
@@ -456,7 +672,14 @@ export function AdminDriverTimeline() {
             <div className="timeline-corner">Time</div>
             <div className="timeline-program-header">Festival program</div>
             {data.map((item) => (
-              <div key={`header-${item.driver.id}`} className="timeline-driver-header">
+              <div
+                key={`header-${item.driver.id}`}
+                className={`timeline-driver-header${dragOverDriverId === item.driver.id ? ' drag-over' : ''}`}
+                onDragEnter={(event) => handleDriverDragOver(event, item.driver.id)}
+                onDragOver={(event) => handleDriverDragOver(event, item.driver.id)}
+                onDragLeave={handleDriverDragLeave}
+                onDrop={(event) => handleDriverDrop(event, item.driver.id)}
+              >
                 {item.driver.name}
               </div>
             ))}
@@ -517,6 +740,7 @@ export function AdminDriverTimeline() {
                     type="button"
                     key={`program-${item.id}`}
                     className="timeline-block program-item"
+                    draggable
                     style={{
                       top: `${top}%`,
                       height: `${height}%`,
@@ -526,6 +750,8 @@ export function AdminDriverTimeline() {
                     }}
                     title={`${item.title}${item.location ? ` · ${item.location}` : ''} · ${formatHour(start)} – ${formatHour(end)}${item.description ? `\n${item.description}` : ''}`}
                     onClick={() => openEditProgramForm(item)}
+                    onDragStart={(event) => handleProgramDragStart(event, item)}
+                    onDragEnd={handleProgramDragEnd}
                   >
                     <span className="timeline-program-time">
                       {formatTime(start)}–{formatTime(end)}
@@ -544,7 +770,36 @@ export function AdminDriverTimeline() {
 
             {/* Driver columns */}
             {data.map((item) => (
-              <div key={item.driver.id} className="timeline-track">
+              <div
+                key={item.driver.id}
+                className={[
+                  'timeline-track',
+                  draggedProgramItemId !== null || draggedRideAssignment
+                    ? 'accepts-timeline-drop'
+                    : '',
+                  dragOverDriverId === item.driver.id ? 'drag-over' : '',
+                  savingBlockDriverId === item.driver.id
+                    || savingRideDriverId === item.driver.id
+                    ? 'saving-block'
+                    : '',
+                ].filter(Boolean).join(' ')}
+                onDragEnter={(event) => handleDriverDragOver(event, item.driver.id)}
+                onDragOver={(event) => handleDriverDragOver(event, item.driver.id)}
+                onDragLeave={handleDriverDragLeave}
+                onDrop={(event) => handleDriverDrop(event, item.driver.id)}
+              >
+                {dragOverDriverId === item.driver.id && (
+                  <div className="timeline-drop-hint">
+                    {draggedRideAssignment
+                      ? `${dragOverRideAction === 'add' ? 'Add driver' : 'Move ride'} with default car`
+                      : draggedProgramItem && (
+                        <>
+                          Block {formatTime(new Date(draggedProgramItem.start_time))}
+                          –{formatTime(new Date(draggedProgramItem.end_time))}
+                        </>
+                      )}
+                  </div>
+                )}
                 {guidelines.map((time, i) => (
                   <div
                     key={`grid-${i}`}
@@ -567,7 +822,24 @@ export function AdminDriverTimeline() {
                         height: `${bottom - top}%`,
                       }}
                       title={`Blocked: ${bp.reason || 'No reason'} (${formatHour(new Date(bp.start_time))} – ${formatHour(new Date(bp.end_time))})`}
-                    />
+                    >
+                      <button
+                        type="button"
+                        className="timeline-blocked-remove"
+                        aria-label={`Remove blocked period: ${bp.reason || 'Blocked'}`}
+                        title="Remove blocked period"
+                        disabled={deletingBlockedPeriodId === bp.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleBlockedPeriodRemove(bp, item.driver.name);
+                        }}
+                      >
+                        ×
+                      </button>
+                      <span className="timeline-blocked-reason">
+                        {bp.reason || 'Blocked'}
+                      </span>
+                    </div>
                   );
                 })}
                 {/* Availability blocks (light shade) */}
@@ -596,10 +868,17 @@ export function AdminDriverTimeline() {
                     <button
                       type="button"
                       key={`assign-${assign.id}`}
-                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}`}
+                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}`}
+                      draggable={!assign.has_departed}
                       style={{ top: `${top}%` }}
-                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}`}
+                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
                       onClick={() => navigate(`/admin/rides/${assign.ride_id}/passengers`)}
+                      onDragStart={(event) => handleAssignmentDragStart(
+                        event,
+                        assign,
+                        item.driver.id,
+                      )}
+                      onDragEnd={handleAssignmentDragEnd}
                     >
                       <span className="timeline-assignment-time">{formatTime(departure)}</span>
                       <span className="timeline-assignment-route">

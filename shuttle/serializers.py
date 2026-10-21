@@ -44,7 +44,7 @@ class RideAssignmentSerializer(serializers.ModelSerializer):
     driver = DriverSerializer(read_only=True)
     driver_id = serializers.IntegerField(write_only=True)
     car = CarSerializer(read_only=True)
-    car_id = serializers.IntegerField(write_only=True)
+    car_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = RideAssignment

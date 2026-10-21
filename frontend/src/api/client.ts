@@ -366,11 +366,24 @@ class ApiClient {
     return this.request<import('../types').RideAssignment[]>(`/admin/rides/${rideId}/assignments/`);
   }
 
-  async adminAddRideAssignment(rideId: number, driverId: number, carId: number) {
+  async adminAddRideAssignment(rideId: number, driverId: number, carId?: number) {
     return this.request<import('../types').RideAssignment>(`/admin/rides/${rideId}/assignments/`, {
       method: 'POST',
-      body: JSON.stringify({ driver_id: driverId, car_id: carId }),
+      body: JSON.stringify({
+        driver_id: driverId,
+        ...(carId !== undefined ? { car_id: carId } : {}),
+      }),
     });
+  }
+
+  async adminReassignRideAssignment(rideId: number, assignmentId: number, driverId: number) {
+    return this.request<import('../types').RideAssignment>(
+      `/admin/rides/${rideId}/assignments/${assignmentId}/`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ driver_id: driverId }),
+      }
+    );
   }
 
   async adminRemoveRideAssignment(rideId: number, assignmentId: number) {
@@ -442,13 +455,9 @@ class ApiClient {
     return this.request<import('../types').PassengerOverview[]>('/admin/passengers/');
   }
 
-  async adminGetDriverTimeline(params?: { start?: string; end?: string }) {
-    const query = new URLSearchParams();
-    if (params?.start) query.append('start', params.start);
-    if (params?.end) query.append('end', params.end);
-    const queryStr = query.toString();
+  async adminGetDriverTimeline() {
     return this.request<import('../types').DriverTimelineResponse>(
-      `/admin/driver-timeline/${queryStr ? `?${queryStr}` : ''}`
+      '/admin/driver-timeline/'
     );
   }
 

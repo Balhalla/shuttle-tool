@@ -200,6 +200,8 @@ export interface FestivalProgramItem {
 export interface SiteSettings {
   banner_enabled: boolean;
   banner_text: string;
+  festival_start_date: string;
+  festival_end_date: string;
   day_change_time: string;
   google_routes_api_key: string;
   base_location_id: number | null;
@@ -233,6 +235,10 @@ export interface BlockedPeriod {
 export interface DriverTimelineResponse {
   drivers: DriverTimeline[];
   program_items: FestivalProgramItem[];
+  range: {
+    start: string;
+    end: string;
+  } | null;
 }
 
 export interface DriverReportEntry {

@@ -808,6 +808,17 @@ body {
   flex-wrap: wrap;
 }
 
+.timeline-festival-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #333;
+}
+
+.timeline-festival-summary span {
+  color: #666;
+}
+
 .timeline-day-boundary {
   flex-basis: 100%;
   color: #666;
@@ -816,6 +827,14 @@ body {
 .timeline-program-hint {
   flex-basis: 100%;
   color: #6d28d9;
+}
+
+.timeline-no-dates {
+  padding: 2rem;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #f8f9fa;
+  color: #555;
 }
 
 .timeline-container {
@@ -874,6 +893,12 @@ body {
   text-overflow: ellipsis;
 }
 
+.timeline-driver-header.drag-over {
+  background: #ffe3e6;
+  box-shadow: inset 0 0 0 2px #dc3545;
+  color: #8b1e2d;
+}
+
 .timeline-program-header {
   width: 280px;
   min-width: 280px;
@@ -916,7 +941,43 @@ body {
 }
 
 .timeline-track.program-track .timeline-block.program-item {
-  cursor: pointer;
+  cursor: grab;
+}
+
+.timeline-track.program-track .timeline-block.program-item:active {
+  cursor: grabbing;
+}
+
+.timeline-track.accepts-timeline-drop {
+  background-color: rgba(220, 53, 69, 0.035);
+}
+
+.timeline-track.drag-over {
+  background-color: rgba(220, 53, 69, 0.12);
+  box-shadow: inset 0 0 0 2px #dc3545;
+}
+
+.timeline-track.saving-block {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.timeline-drop-hint {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: max-content;
+  max-width: calc(100% - 1rem);
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .timeline-marker {
@@ -966,10 +1027,61 @@ body {
 }
 
 .timeline-block.blocked {
+  display: flex;
+  align-items: flex-start;
+  overflow: hidden;
+  padding: 0.25rem 1.45rem 0.25rem 0.35rem;
   background-color: rgba(220, 53, 69, 0.2);
   border-left: 2px solid #dc3545;
   border-right: 2px solid #dc3545;
+  color: #8b1e2d;
   z-index: 2;
+}
+
+.timeline-blocked-remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  padding: 0;
+  border: 1px solid rgba(139, 30, 45, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.65);
+  color: rgba(139, 30, 45, 0.65);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.timeline-blocked-remove:hover {
+  border-color: #a71d2a;
+  background: #fff;
+  color: #a71d2a;
+  opacity: 1;
+}
+
+.timeline-blocked-remove:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.timeline-blocked-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .timeline-block.program-item {
@@ -1049,6 +1161,14 @@ body {
   justify-content: center;
   gap: 0.05rem;
   overflow: hidden;
+}
+
+.timeline-block.assignment.draggable-assignment {
+  cursor: grab;
+}
+
+.timeline-block.assignment.draggable-assignment:active {
+  cursor: grabbing;
 }
 
 .timeline-block.assignment:hover {
