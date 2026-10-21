@@ -197,6 +197,14 @@ export interface FestivalProgramItem {
   updated_at: string;
 }
 
+export interface TimelineUnassignedRide {
+  id: number;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  is_vip: boolean;
+}
+
 export interface SiteSettings {
   banner_enabled: boolean;
   banner_text: string;
@@ -235,6 +243,7 @@ export interface BlockedPeriod {
 export interface DriverTimelineResponse {
   drivers: DriverTimeline[];
   program_items: FestivalProgramItem[];
+  unassigned_rides: TimelineUnassignedRide[];
   range: {
     start: string;
     end: string;

@@ -1207,6 +1207,7 @@ def admin_driver_timeline(request):
         return Response({
             'drivers': [],
             'program_items': [],
+            'unassigned_rides': [],
             'range': None,
         })
 
@@ -1244,6 +1245,11 @@ def admin_driver_timeline(request):
         end_time__gte=start,
         start_time__lt=end,
     )
+    unassigned_rides = Ride.objects.filter(
+        departure_time__gte=start,
+        departure_time__lt=end,
+        assignments__isnull=True,
+    ).select_related('origin', 'destination')
 
     result = []
     for driver in drivers:
@@ -1294,6 +1300,16 @@ def admin_driver_timeline(request):
     return Response({
         'drivers': result,
         'program_items': FestivalProgramItemSerializer(program_qs, many=True).data,
+        'unassigned_rides': [
+            {
+                'id': ride.id,
+                'origin': ride.origin.name,
+                'destination': ride.destination.name,
+                'departure_time': ride.departure_time.isoformat(),
+                'is_vip': ride.is_vip,
+            }
+            for ride in unassigned_rides
+        ],
         'range': {
             'start': start.isoformat(),
             'end': end.isoformat(),

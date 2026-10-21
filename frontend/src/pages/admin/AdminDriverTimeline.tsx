@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { DriverTimeline, FestivalProgramItem } from '../../types';
+import type {
+  DriverTimeline,
+  FestivalProgramItem,
+  TimelineUnassignedRide,
+} from '../../types';
 
 type TimelineBlockedPeriod = DriverTimeline['blocked_periods'][number];
 type TimelineAssignment = DriverTimeline['assignments'][number];
@@ -24,12 +28,20 @@ type TimelineDaySection = {
   label: string;
 };
 
+type TimelineBlockLayout = {
+  column: number;
+  columnCount: number;
+};
+
 const TIME_AXIS_WIDTH = 110;
-const PROGRAM_TRACK_WIDTH = 220;
+const PROGRAM_TRACK_WIDTH = 180;
+const UNASSIGNED_TRACK_WIDTH = 140;
 const DRIVER_TRACK_WIDTH = 150;
 const PROGRAM_CLICK_INCREMENT_MS = 15 * 60 * 1000;
 const PROGRAM_DRAG_TYPE = 'application/x-shuttle-program-item';
 const RIDE_ASSIGNMENT_DRAG_TYPE = 'application/x-shuttle-ride-assignment';
+const UNASSIGNED_RIDE_DRAG_TYPE = 'application/x-shuttle-unassigned-ride';
+const ASSIGNMENT_VISUAL_DURATION_MS = 52 * 60 * 1000;
 
 function TimelineNotifications({
   error,
@@ -111,6 +123,77 @@ function buildTimelineDaySections(startMs: number, endMs: number) {
   return sections;
 }
 
+function getAssignmentOverlapInfo(
+  driverTimeline: DriverTimeline,
+  assignment: TimelineAssignment,
+) {
+  const startMs = new Date(assignment.departure_time).getTime();
+  const endMs = startMs + ASSIGNMENT_VISUAL_DURATION_MS;
+  const overlapsRide = driverTimeline.assignments.some((otherAssignment) => {
+    if (otherAssignment.id === assignment.id) return false;
+    const otherStartMs = new Date(otherAssignment.departure_time).getTime();
+    const otherEndMs = otherStartMs + ASSIGNMENT_VISUAL_DURATION_MS;
+    return startMs < otherEndMs && endMs > otherStartMs;
+  });
+  const overlapsBlockedPeriod = driverTimeline.blocked_periods.some(
+    (blockedPeriod) => (
+      startMs < new Date(blockedPeriod.end_time).getTime()
+      && endMs > new Date(blockedPeriod.start_time).getTime()
+    ),
+  );
+
+  const conflicts = [
+    overlapsRide ? 'another ride' : '',
+    overlapsBlockedPeriod ? 'a blocked period' : '',
+  ].filter(Boolean);
+  return {
+    label: conflicts.length > 0 ? `Overlaps ${conflicts.join(' and ')}` : '',
+    overlapsBlockedPeriod,
+  };
+}
+
+function layoutTimelineLaneBlocks(
+  blocks: Array<{ key: string; start: number; end: number }>,
+) {
+  const layout = new Map<string, TimelineBlockLayout>();
+  const sortedBlocks = [...blocks].sort((a, b) => a.start - b.start || a.end - b.end);
+  let cluster: Array<{ key: string; start: number; end: number; column: number }> = [];
+  let columnEnds: number[] = [];
+  let clusterEnd = -Infinity;
+
+  const flushCluster = () => {
+    for (const block of cluster) {
+      layout.set(block.key, {
+        column: block.column,
+        columnCount: Math.max(1, columnEnds.length),
+      });
+    }
+  };
+
+  for (const block of sortedBlocks) {
+    if (cluster.length > 0 && block.start >= clusterEnd) {
+      flushCluster();
+      cluster = [];
+      columnEnds = [];
+      clusterEnd = -Infinity;
+    }
+
+    let column = columnEnds.findIndex((end) => end <= block.start);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(block.end);
+    } else {
+      columnEnds[column] = block.end;
+    }
+
+    cluster.push({ ...block, column });
+    clusterEnd = Math.max(clusterEnd, block.end);
+  }
+  flushCluster();
+
+  return layout;
+}
+
 function formatDateTimeLocal(value: string | Date) {
   const date = typeof value === 'string' ? new Date(value) : value;
   const year = date.getFullYear();
@@ -189,6 +272,7 @@ export function AdminDriverTimeline() {
   const headerScrollRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<DriverTimeline[]>([]);
   const [programItems, setProgramItems] = useState<FestivalProgramItem[]>([]);
+  const [unassignedRides, setUnassignedRides] = useState<TimelineUnassignedRide[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -212,8 +296,11 @@ export function AdminDriverTimeline() {
   const [savingBlockDriverId, setSavingBlockDriverId] = useState<number | null>(null);
   const [deletingBlockedPeriodId, setDeletingBlockedPeriodId] = useState<number | null>(null);
   const [draggedRideAssignment, setDraggedRideAssignment] = useState<DraggedRideAssignment | null>(null);
+  const [draggedUnassignedRide, setDraggedUnassignedRide] = useState<TimelineUnassignedRide | null>(null);
   const [dragOverRideAction, setDragOverRideAction] = useState<'move' | 'add'>('move');
+  const [unassignedDropActive, setUnassignedDropActive] = useState(false);
   const [savingRideDriverId, setSavingRideDriverId] = useState<number | null>(null);
+  const [savingUnassignment, setSavingUnassignment] = useState(false);
   const [hoveredRideId, setHoveredRideId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -226,6 +313,7 @@ export function AdminDriverTimeline() {
         setTimelineRange(timeline.range);
         setData(timeline.drivers);
         setProgramItems(timeline.program_items || []);
+        setUnassignedRides(timeline.unassigned_rides || []);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load timeline');
@@ -246,6 +334,7 @@ export function AdminDriverTimeline() {
       setTimelineRange(result.range);
       setData(result.drivers);
       setProgramItems(result.program_items || []);
+      setUnassignedRides(result.unassigned_rides || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load timeline');
     } finally {
@@ -266,6 +355,7 @@ export function AdminDriverTimeline() {
     event.dataTransfer.setData('text/plain', item.title);
     setDraggedProgramItemId(item.id);
     setDraggedRideAssignment(null);
+    setDraggedUnassignedRide(null);
     setNotice('');
   };
 
@@ -289,6 +379,7 @@ export function AdminDriverTimeline() {
       `ride:${sourceDriverId}:${assignment.id}`,
     );
     setDraggedProgramItemId(null);
+    setDraggedUnassignedRide(null);
     setDraggedRideAssignment({ assignment, sourceDriverId });
     setNotice('');
   };
@@ -296,6 +387,28 @@ export function AdminDriverTimeline() {
   const handleAssignmentDragEnd = () => {
     setDraggedRideAssignment(null);
     setDragOverDriverId(null);
+    setUnassignedDropActive(false);
+    setHoveredRideId(null);
+  };
+
+  const handleUnassignedRideDragStart = (
+    event: React.DragEvent<HTMLButtonElement>,
+    ride: TimelineUnassignedRide,
+  ) => {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData(UNASSIGNED_RIDE_DRAG_TYPE, String(ride.id));
+    event.dataTransfer.setData('text/plain', `unassigned:${ride.id}`);
+    setDraggedProgramItemId(null);
+    setDraggedRideAssignment(null);
+    setDraggedUnassignedRide(ride);
+    setNotice('');
+  };
+
+  const handleUnassignedRideDragEnd = () => {
+    setDraggedUnassignedRide(null);
+    setDragOverDriverId(null);
+    setUnassignedDropActive(false);
+    setHoveredRideId(null);
   };
 
   const handleDriverDragOver = (
@@ -304,7 +417,10 @@ export function AdminDriverTimeline() {
   ) => {
     const dragTypes = Array.from(event.dataTransfer.types);
     const isRideDrag = Boolean(
-      draggedRideAssignment || dragTypes.includes(RIDE_ASSIGNMENT_DRAG_TYPE),
+      draggedRideAssignment
+      || draggedUnassignedRide
+      || dragTypes.includes(RIDE_ASSIGNMENT_DRAG_TYPE)
+      || dragTypes.includes(UNASSIGNED_RIDE_DRAG_TYPE),
     );
     const isProgramDrag = Boolean(
       draggedProgramItem
@@ -314,7 +430,14 @@ export function AdminDriverTimeline() {
 
     event.preventDefault();
     const addMode = Boolean(isRideDrag && event.ctrlKey);
-    event.dataTransfer.dropEffect = isRideDrag ? (addMode ? 'copy' : 'move') : 'copy';
+    event.dataTransfer.dropEffect = (
+      draggedUnassignedRide
+      || dragTypes.includes(UNASSIGNED_RIDE_DRAG_TYPE)
+    )
+      ? 'copy'
+      : isRideDrag
+        ? (addMode ? 'copy' : 'move')
+        : 'copy';
     setDragOverDriverId(driverId);
     setDragOverRideAction(addMode ? 'add' : 'move');
   };
@@ -374,6 +497,7 @@ export function AdminDriverTimeline() {
     event: React.DragEvent<HTMLDivElement>,
     driverId: number,
   ) => {
+    setHoveredRideId(null);
     const plainText = event.dataTransfer.getData('text/plain');
     const rawAssignment = event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
       || (plainText.startsWith('ride:') ? plainText.slice(5) : '');
@@ -422,6 +546,111 @@ export function AdminDriverTimeline() {
     } finally {
       setSavingRideDriverId(null);
       setDraggedRideAssignment(null);
+      setHoveredRideId(null);
+    }
+  };
+
+  const handleUnassignedRideToDriver = async (
+    event: React.DragEvent<HTMLDivElement>,
+    driverId: number,
+  ) => {
+    const plainText = event.dataTransfer.getData('text/plain');
+    const rawId = event.dataTransfer.getData(UNASSIGNED_RIDE_DRAG_TYPE)
+      || (plainText.startsWith('unassigned:') ? plainText.slice(11) : '');
+    const ride = unassignedRides.find((entry) => entry.id === Number(rawId))
+      ?? draggedUnassignedRide;
+    const targetDriver = data.find((entry) => entry.driver.id === driverId);
+    if (!ride || !targetDriver) {
+      setError('Could not identify the dropped unassigned ride.');
+      return;
+    }
+
+    setSavingRideDriverId(driverId);
+    setError('');
+    setNotice('');
+    try {
+      await api.adminAddRideAssignment(ride.id, driverId);
+      await loadData();
+      setNotice(
+        `Assigned ${targetDriver.driver.name} and their default car to the ride.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign the ride');
+    } finally {
+      setSavingRideDriverId(null);
+      setDraggedUnassignedRide(null);
+    }
+  };
+
+  const handleUnassignedLaneDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
+    const dragTypes = Array.from(event.dataTransfer.types);
+    if (
+      !draggedRideAssignment
+      && !dragTypes.includes(RIDE_ASSIGNMENT_DRAG_TYPE)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setUnassignedDropActive(true);
+  };
+
+  const handleUnassignedLaneDragLeave = (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setUnassignedDropActive(false);
+  };
+
+  const handleUnassignedLaneDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+    setUnassignedDropActive(false);
+
+    const plainText = event.dataTransfer.getData('text/plain');
+    const rawAssignment = event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
+      || (plainText.startsWith('ride:') ? plainText.slice(5) : '');
+    const [rawSourceDriverId, rawAssignmentId] = rawAssignment.split(':').map(Number);
+    const sourceDriver = data.find((entry) => entry.driver.id === rawSourceDriverId);
+    const assignment = draggedRideAssignment?.assignment
+      ?? sourceDriver?.assignments.find((entry) => entry.id === rawAssignmentId);
+    if (!assignment) {
+      setError('Could not identify the dropped ride assignment.');
+      return;
+    }
+    const sourceDriverName = sourceDriver?.driver.name
+      ?? data.find((entry) => entry.assignments.some((item) => item.id === assignment.id))
+        ?.driver.name
+      ?? 'driver';
+    const remainingAssignments = data.reduce(
+      (count, entry) => (
+        count + entry.assignments.filter((item) => item.ride_id === assignment.ride_id).length
+      ),
+      0,
+    ) - 1;
+
+    setSavingUnassignment(true);
+    setError('');
+    setNotice('');
+    try {
+      await api.adminRemoveRideAssignment(assignment.ride_id, assignment.id);
+      await loadData();
+      setNotice(
+        remainingAssignments > 0
+          ? `Removed ${sourceDriverName}'s assignment from the ride.`
+          : 'Moved the ride to Unassigned.',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unassign the ride');
+    } finally {
+      setSavingUnassignment(false);
+      setDraggedRideAssignment(null);
+      setHoveredRideId(null);
     }
   };
 
@@ -431,7 +660,16 @@ export function AdminDriverTimeline() {
   ) => {
     event.preventDefault();
     setDragOverDriverId(null);
+    setUnassignedDropActive(false);
     const plainText = event.dataTransfer.getData('text/plain');
+    if (
+      draggedUnassignedRide
+      || event.dataTransfer.getData(UNASSIGNED_RIDE_DRAG_TYPE)
+      || plainText.startsWith('unassigned:')
+    ) {
+      await handleUnassignedRideToDriver(event, driverId);
+      return;
+    }
     if (
       draggedRideAssignment
       || event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
@@ -472,8 +710,33 @@ export function AdminDriverTimeline() {
     ? Math.max(1, Math.round(totalMs / (24 * 60 * 60 * 1000)))
     : 1;
   const timelineHeight = Math.max(1440, Math.min(10080, remainingDayCount * 1440));
-  const timelineMinWidth = `${TIME_AXIS_WIDTH + PROGRAM_TRACK_WIDTH + data.length * DRIVER_TRACK_WIDTH}px`;
+  const timelineMinWidth = `${TIME_AXIS_WIDTH + PROGRAM_TRACK_WIDTH + UNASSIGNED_TRACK_WIDTH + data.length * DRIVER_TRACK_WIDTH}px`;
   const daySections = buildTimelineDaySections(startMs, endMs);
+  const unassignedRideLayout = layoutTimelineLaneBlocks(
+    unassignedRides.map((ride) => {
+      const rideStart = new Date(ride.departure_time).getTime();
+      return {
+        key: `unassigned-${ride.id}`,
+        start: rideStart,
+        end: rideStart + ASSIGNMENT_VISUAL_DURATION_MS,
+      };
+    }),
+  );
+  const laneLayouts = new Map<number, Map<string, TimelineBlockLayout>>(
+    data.map((driverTimeline) => [
+      driverTimeline.driver.id,
+      layoutTimelineLaneBlocks([
+        ...driverTimeline.assignments.map((assignment) => {
+          const assignmentStart = new Date(assignment.departure_time).getTime();
+          return {
+            key: `assignment-${assignment.id}`,
+            start: assignmentStart,
+            end: assignmentStart + ASSIGNMENT_VISUAL_DURATION_MS,
+          };
+        }),
+      ]),
+    ]),
+  );
 
   const toPercent = (dateStr: string) => {
     const ms = new Date(dateStr).getTime();
@@ -693,8 +956,8 @@ export function AdminDriverTimeline() {
           Each festival day runs from {dayChangeTime} until {dayChangeTime} the following day.
         </small>
         <small className="timeline-program-hint">
-          Drag a program item to block a driver. Drag a ride to reassign it, or
-          Ctrl-drag to add the driver. Right-click the program lane to add an item.
+          Drag rides between drivers and Unassigned. Ctrl-drag a ride to add a
+          driver. Drag program items to block a driver.
         </small>
       </div>
 
@@ -783,6 +1046,12 @@ export function AdminDriverTimeline() {
           <div className="timeline-header" style={{ minWidth: timelineMinWidth }}>
             <div className="timeline-corner">Time</div>
             <div className="timeline-program-header">Festival program</div>
+            <div
+              className="timeline-unassigned-header"
+              title="Rides with no assigned driver"
+            >
+              Unassigned ({unassignedRides.length})
+            </div>
             {data.map((item) => (
               <div
                 key={`header-${item.driver.id}`}
@@ -882,13 +1151,73 @@ export function AdminDriverTimeline() {
               )}
             </div>
 
+            {/* Rides without a driver */}
+            <div
+              className={`timeline-track unassigned-track${unassignedDropActive ? ' drag-over' : ''}${savingUnassignment ? ' saving-block' : ''}`}
+              onDragEnter={handleUnassignedLaneDragOver}
+              onDragOver={handleUnassignedLaneDragOver}
+              onDragLeave={handleUnassignedLaneDragLeave}
+              onDrop={handleUnassignedLaneDrop}
+            >
+              {unassignedDropActive && (
+                <div className="timeline-drop-hint">Move ride to Unassigned</div>
+              )}
+              <TimelineDayBands sections={daySections} />
+              {guidelines.map((time, i) => (
+                <div
+                  key={`unassigned-grid-${i}`}
+                  className={`timeline-gridline${time.getMinutes() === 0 ? ' hour' : ''}`}
+                  style={{ top: `${((time.getTime() - startMs) / totalMs) * 100}%` }}
+                />
+              ))}
+              {unassignedRides.map((ride) => {
+                const top = toPercent(ride.departure_time);
+                if (top < 0 || top > 100) return null;
+                const departure = new Date(ride.departure_time);
+                const rideLayout = unassignedRideLayout.get(`unassigned-${ride.id}`) ?? {
+                  column: 0,
+                  columnCount: 1,
+                };
+                const rideWidth = 100 / rideLayout.columnCount;
+                return (
+                  <button
+                    type="button"
+                    key={`unassigned-${ride.id}`}
+                    className={`timeline-block assignment unassigned-ride draggable-unassigned${ride.is_vip ? ' vip' : ''}${rideLayout.columnCount > 1 ? ' split-lane' : ''}`}
+                    draggable
+                    style={{
+                      top: `${top}%`,
+                      left: `calc(${rideLayout.column * rideWidth}% + 2px)`,
+                      width: `calc(${rideWidth}% - 4px)`,
+                      right: 'auto',
+                    }}
+                    title={`${formatHour(departure)} · ${ride.origin} → ${ride.destination} · No driver assigned`}
+                    onClick={() => navigate(`/admin/rides/${ride.id}/passengers`)}
+                    onDragStart={(event) => handleUnassignedRideDragStart(event, ride)}
+                    onDragEnd={handleUnassignedRideDragEnd}
+                  >
+                    <span className="timeline-assignment-time">{formatTime(departure)}</span>
+                    <span className="timeline-assignment-route">
+                      {ride.origin} → {ride.destination}
+                    </span>
+                    <span className="timeline-assignment-meta">No driver assigned</span>
+                  </button>
+                );
+              })}
+              {unassignedRides.length === 0 && (
+                <span className="timeline-empty-track">No unassigned rides</span>
+              )}
+            </div>
+
             {/* Driver columns */}
             {data.map((item) => (
               <div
                 key={item.driver.id}
                 className={[
                   'timeline-track',
-                  draggedProgramItemId !== null || draggedRideAssignment
+                  draggedProgramItemId !== null
+                    || draggedRideAssignment
+                    || draggedUnassignedRide
                     ? 'accepts-timeline-drop'
                     : '',
                   dragOverDriverId === item.driver.id ? 'drag-over' : '',
@@ -904,7 +1233,9 @@ export function AdminDriverTimeline() {
               >
                 {dragOverDriverId === item.driver.id && (
                   <div className="timeline-drop-hint">
-                    {draggedRideAssignment
+                    {draggedUnassignedRide
+                      ? 'Assign ride with default car'
+                      : draggedRideAssignment
                       ? `${dragOverRideAction === 'add' ? 'Add driver' : 'Move ride'} with default car`
                       : draggedProgramItem && (
                         <>
@@ -979,14 +1310,27 @@ export function AdminDriverTimeline() {
                   const top = toPercent(assign.departure_time);
                   if (top < 0 || top > 100) return null;
                   const departure = new Date(assign.departure_time);
+                  const overlap = getAssignmentOverlapInfo(item, assign);
+                  const overlapLabel = overlap.label;
+                  const assignmentLayout = laneLayouts.get(item.driver.id)?.get(`assignment-${assign.id}`) ?? {
+                    column: 0,
+                    columnCount: 1,
+                  };
+                  const assignmentWidth = 100 / assignmentLayout.columnCount;
+                  const blockedIndentPx = overlap.overlapsBlockedPeriod ? 12 : 0;
                   return (
                     <button
                       type="button"
                       key={`assign-${assign.id}`}
-                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}${hoveredRideId === assign.ride_id ? ' same-ride-highlight' : ''}`}
+                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}${hoveredRideId === assign.ride_id ? ' same-ride-highlight' : ''}${overlapLabel ? ' timeline-assignment-overlap' : ''}${assignmentLayout.columnCount > 1 ? ' split-lane' : ''}`}
                       draggable={!assign.has_departed}
-                      style={{ top: `${top}%` }}
-                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
+                      style={{
+                        top: `${top}%`,
+                        left: `calc(${assignmentLayout.column * assignmentWidth}% + ${2 + blockedIndentPx}px)`,
+                        width: `calc(${assignmentWidth}% - ${4 + blockedIndentPx}px)`,
+                        right: 'auto',
+                      }}
+                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}${overlapLabel ? `\n⚠ ${overlapLabel}` : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
                       onClick={() => navigate(`/admin/rides/${assign.ride_id}/passengers`)}
                       onMouseEnter={() => setHoveredRideId(assign.ride_id)}
                       onMouseLeave={() => setHoveredRideId(null)}
@@ -999,6 +1343,15 @@ export function AdminDriverTimeline() {
                       )}
                       onDragEnd={handleAssignmentDragEnd}
                     >
+                      {overlapLabel && (
+                        <span
+                          className="timeline-assignment-overlap-badge"
+                          aria-label={overlapLabel}
+                          title={overlapLabel}
+                        >
+                          !
+                        </span>
+                      )}
                       <span className="timeline-assignment-time">{formatTime(departure)}</span>
                       <span className="timeline-assignment-route">
                         {assign.origin} → {assign.destination}
@@ -1036,6 +1389,16 @@ export function AdminDriverTimeline() {
         </span>
         <span className="legend-item">
           <span className="legend-swatch" style={{ backgroundColor: 'rgba(220, 53, 69, 0.2)', border: '2px solid #dc3545' }} /> Blocked period
+        </span>
+        <span className="legend-item">
+          <span
+            className="legend-swatch"
+            style={{
+              backgroundColor: '#fff',
+              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(220, 53, 69, 0.35) 3px, rgba(220, 53, 69, 0.35) 5px)',
+              border: '2px dashed #dc3545',
+            }}
+          /> Overlap / conflict
         </span>
       </div>
     </div>

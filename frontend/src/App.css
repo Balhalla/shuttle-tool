@@ -1000,13 +1000,28 @@ body {
 }
 
 .timeline-program-header {
-  width: 220px;
-  min-width: 220px;
-  flex: 0 0 220px;
+  width: 180px;
+  min-width: 180px;
+  flex: 0 0 180px;
   padding: 0.75rem 0.5rem;
   border-right: 1px solid #dee2e6;
   background: #f3e8ff;
   color: #5b21b6;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-unassigned-header {
+  width: 140px;
+  min-width: 140px;
+  flex: 0 0 140px;
+  padding: 0.75rem 0.5rem;
+  border-right: 2px solid #fdba74;
+  background: #fff7ed;
+  color: #9a3412;
   font-weight: 600;
   text-align: center;
   white-space: nowrap;
@@ -1060,12 +1075,36 @@ body {
 }
 
 .timeline-track.program-track {
-  width: 220px;
-  min-width: 220px;
-  flex: 0 0 220px;
+  width: 180px;
+  min-width: 180px;
+  flex: 0 0 180px;
   background: rgba(124, 58, 237, 0.035);
   border-right: 2px solid #d8b4fe;
   cursor: context-menu;
+}
+
+.timeline-track.unassigned-track {
+  width: 140px;
+  min-width: 140px;
+  flex: 0 0 140px;
+  background: rgba(249, 115, 22, 0.035);
+  border-right: 2px solid #fdba74;
+}
+
+.timeline-block.assignment.unassigned-ride {
+  background-color: #ea580c;
+}
+
+.timeline-block.assignment.unassigned-ride.draggable-unassigned {
+  cursor: grab;
+}
+
+.timeline-block.assignment.unassigned-ride.draggable-unassigned:active {
+  cursor: grabbing;
+}
+
+.timeline-block.assignment.unassigned-ride:hover {
+  background-color: #c2410c;
 }
 
 .timeline-track.program-track .timeline-block.program-item {
@@ -1321,6 +1360,63 @@ body {
 
 .timeline-block.assignment.departed {
   opacity: 0.65;
+}
+
+.timeline-block.assignment.timeline-assignment-overlap {
+  z-index: 5;
+  padding-right: 1.45rem;
+  outline: 2px dashed #dc3545;
+  outline-offset: 1px;
+  box-shadow:
+    0 0 0 4px rgba(220, 53, 69, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(255, 255, 255, 0.28) 4px,
+    rgba(255, 255, 255, 0.28) 7px
+  );
+}
+
+.timeline-block.assignment.split-lane {
+  gap: 0;
+  padding: 0.25rem 0.15rem;
+}
+
+.timeline-block.assignment.split-lane .timeline-assignment-route,
+.timeline-block.assignment.split-lane .timeline-assignment-meta {
+  display: none;
+}
+
+.timeline-block.assignment.split-lane .timeline-assignment-time {
+  padding-right: 0.7rem;
+  font-size: 0.66rem;
+}
+
+.timeline-block.assignment.split-lane .timeline-assignment-overlap-badge {
+  top: 2px;
+  right: 2px;
+  width: 0.8rem;
+  height: 0.8rem;
+  font-size: 0.62rem;
+}
+
+.timeline-assignment-overlap-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .timeline-assignment-time {

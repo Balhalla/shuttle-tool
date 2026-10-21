@@ -465,3 +465,22 @@ class RideAssignmentTimelineTestCase(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('Departed assignments', response.data['error'])
+
+    @patch('shuttle.views.timezone.localtime')
+    def test_timeline_includes_rides_without_assignments(self, mock_localtime):
+        mock_localtime.return_value = datetime(
+            2026, 10, 21, 12, 0, tzinfo=ZoneInfo('Europe/Brussels')
+        )
+        unassigned_ride = Ride.objects.create(
+            origin=self.origin,
+            destination=self.destination,
+            departure_time='2027-02-27T23:00:00+01:00',
+        )
+
+        response = self.client.get('/api/admin/driver-timeline/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [ride['id'] for ride in response.data['unassigned_rides']],
+            [unassigned_ride.id],
+        )
