@@ -1,6 +1,14 @@
 """Admin configuration for shuttle app."""
 from django.contrib import admin
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation
+from .models import (
+    Car,
+    Location,
+    TravelTime,
+    Ride,
+    RideAssignment,
+    Reservation,
+    FestivalProgramItem,
+)
 
 
 @admin.register(Car)
@@ -49,3 +57,11 @@ class ReservationAdmin(admin.ModelAdmin):
     list_filter = ['status', 'created_at']
     search_fields = ['user__email', 'guest_email']
     raw_id_fields = ['ride', 'user']
+
+
+@admin.register(FestivalProgramItem)
+class FestivalProgramItemAdmin(admin.ModelAdmin):
+    list_display = ['title', 'location', 'start_time', 'end_time']
+    list_filter = ['start_time', 'location']
+    search_fields = ['title', 'location', 'description']
+    ordering = ['start_time']

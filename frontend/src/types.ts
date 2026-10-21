@@ -186,6 +186,17 @@ export interface DriverTimeline {
   }[];
 }
 
+export interface FestivalProgramItem {
+  id: number;
+  title: string;
+  location: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SiteSettings {
   banner_enabled: boolean;
   banner_text: string;
@@ -221,6 +232,7 @@ export interface BlockedPeriod {
 
 export interface DriverTimelineResponse {
   drivers: DriverTimeline[];
+  program_items: FestivalProgramItem[];
 }
 
 export interface DriverReportEntry {

@@ -1,6 +1,15 @@
 """Serializers for shuttle app."""
 from rest_framework import serializers
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, BlockedPeriod
+from .models import (
+    Car,
+    Location,
+    TravelTime,
+    Ride,
+    RideAssignment,
+    Reservation,
+    BlockedPeriod,
+    FestivalProgramItem,
+)
 from accounts.serializers import UserSerializer, DriverSerializer
 
 
@@ -165,3 +174,20 @@ class BlockedPeriodSerializer(serializers.ModelSerializer):
         model = BlockedPeriod
         fields = ['id', 'driver', 'driver_id', 'start_time', 'end_time', 'reason', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class FestivalProgramItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FestivalProgramItem
+        fields = [
+            'id', 'title', 'location', 'description', 'start_time', 'end_time',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        start_time = data.get('start_time', getattr(self.instance, 'start_time', None))
+        end_time = data.get('end_time', getattr(self.instance, 'end_time', None))
+        if start_time and end_time and start_time >= end_time:
+            raise serializers.ValidationError('End time must be after start time')
+        return data

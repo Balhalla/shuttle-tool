@@ -3,7 +3,7 @@ import io
 from django.test import TestCase
 from rest_framework.test import APIClient
 from accounts.models import User
-from shuttle.models import Location, Car, Ride, RideAssignment
+from shuttle.models import Location, Car, Ride, RideAssignment, FestivalProgramItem
 
 
 class CsvImportTestCase(TestCase):
@@ -195,3 +195,95 @@ class CsvImportTestCase(TestCase):
         )
         resp = self._upload_csv(csv)
         self.assertEqual(resp.status_code, 201)
+
+
+class FestivalProgramTimelineTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            email='program-admin@example.com', name='Program Admin', role='admin'
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _program_data(self, **overrides):
+        data = {
+            'title': 'Opening concert',
+            'location': 'Main stage',
+            'description': 'Festival opening',
+            'start_time': '2026-07-15T20:00:00+02:00',
+            'end_time': '2026-07-15T21:30:00+02:00',
+        }
+        data.update(overrides)
+        return data
+
+    def test_admin_can_create_update_and_delete_program_item(self):
+        response = self.client.post(
+            '/api/admin/festival-program/',
+            self._program_data(),
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['title'], 'Opening concert')
+        self.assertEqual(FestivalProgramItem.objects.count(), 1)
+
+        item_id = response.data['id']
+        response = self.client.patch(
+            f'/api/admin/festival-program/{item_id}/',
+            {'title': 'Opening ceremony'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['title'], 'Opening ceremony')
+
+        response = self.client.delete(f'/api/admin/festival-program/{item_id}/')
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(FestivalProgramItem.objects.count(), 0)
+
+    def test_program_item_end_must_be_after_start(self):
+        response = self.client.post(
+            '/api/admin/festival-program/',
+            self._program_data(end_time='2026-07-15T19:00:00+02:00'),
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(FestivalProgramItem.objects.count(), 0)
+
+    def test_timeline_returns_only_program_items_in_range(self):
+        FestivalProgramItem.objects.create(
+            title='In range',
+            start_time='2026-07-15T20:00:00+02:00',
+            end_time='2026-07-15T21:00:00+02:00',
+        )
+        FestivalProgramItem.objects.create(
+            title='Outside range',
+            start_time='2026-07-20T20:00:00+02:00',
+            end_time='2026-07-20T21:00:00+02:00',
+        )
+
+        response = self.client.get(
+            '/api/admin/driver-timeline/',
+            {
+                'start': '2026-07-15T06:00:00+02:00',
+                'end': '2026-07-16T06:00:00+02:00',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item['title'] for item in response.data['program_items']],
+            ['In range'],
+        )
+
+    def test_non_admin_cannot_manage_program_items(self):
+        public_user = User.objects.create_user(
+            email='program-public@example.com', name='Public', role='public'
+        )
+        self.client.force_authenticate(user=public_user)
+
+        response = self.client.post(
+            '/api/admin/festival-program/',
+            self._program_data(),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)

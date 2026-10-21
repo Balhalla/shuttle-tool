@@ -813,6 +813,11 @@ body {
   color: #666;
 }
 
+.timeline-program-hint {
+  flex-basis: 100%;
+  color: #6d28d9;
+}
+
 .timeline-container {
   border: 1px solid #dee2e6;
   border-radius: 8px;
@@ -869,6 +874,21 @@ body {
   text-overflow: ellipsis;
 }
 
+.timeline-program-header {
+  width: 280px;
+  min-width: 280px;
+  flex: 0 0 280px;
+  padding: 0.75rem;
+  border-right: 1px solid #dee2e6;
+  background: #f3e8ff;
+  color: #5b21b6;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .timeline-body {
   display: flex;
 }
@@ -884,6 +904,19 @@ body {
   min-width: 240px;
   position: relative;
   border-right: 1px solid #eee;
+}
+
+.timeline-track.program-track {
+  width: 280px;
+  min-width: 280px;
+  flex: 0 0 280px;
+  background: rgba(124, 58, 237, 0.035);
+  border-right: 2px solid #d8b4fe;
+  cursor: context-menu;
+}
+
+.timeline-track.program-track .timeline-block.program-item {
+  cursor: pointer;
 }
 
 .timeline-marker {
@@ -937,6 +970,67 @@ body {
   border-left: 2px solid #dc3545;
   border-right: 2px solid #dc3545;
   z-index: 2;
+}
+
+.timeline-block.program-item {
+  left: 5px;
+  right: 5px;
+  min-height: 44px;
+  padding: 0.35rem 0.45rem;
+  border: 0;
+  border-radius: 5px;
+  background-color: #7c3aed;
+  box-shadow: 0 1px 4px rgba(76, 29, 149, 0.28);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.08rem;
+  overflow: hidden;
+  z-index: 4;
+}
+
+.timeline-block.program-item:hover {
+  background-color: #6d28d9;
+}
+
+.timeline-program-time {
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.timeline-program-title,
+.timeline-program-location {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.timeline-program-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.timeline-program-location {
+  font-size: 0.7rem;
+  opacity: 0.88;
+}
+
+.timeline-empty-track {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #8b5cf6;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .timeline-block.assignment {
@@ -1005,6 +1099,10 @@ body {
   font-size: 0.9rem;
   color: #666;
   flex-wrap: wrap;
+}
+
+.program-delete-button {
+  margin-right: auto;
 }
 
 /* Page header */

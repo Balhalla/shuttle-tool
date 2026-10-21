@@ -13,6 +13,7 @@ router.register(r'admin/reservations', views.AdminReservationViewSet, basename='
 router.register(r'admin/travel-times', views.AdminTravelTimeViewSet, basename='admin-travel-time')
 router.register(r'admin/driver-availabilities', views.AdminDriverAvailabilityViewSet, basename='admin-driver-availability')
 router.register(r'admin/blocked-periods', views.AdminBlockedPeriodViewSet, basename='admin-blocked-period')
+router.register(r'admin/festival-program', views.AdminFestivalProgramViewSet, basename='admin-festival-program')
 
 urlpatterns = [
     # Config

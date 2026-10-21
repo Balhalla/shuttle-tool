@@ -18,12 +18,23 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.db import transaction
 
-from .models import Car, Location, TravelTime, Ride, RideAssignment, Reservation, SiteSettings, BlockedPeriod
+from .models import (
+    Car,
+    Location,
+    TravelTime,
+    Ride,
+    RideAssignment,
+    Reservation,
+    SiteSettings,
+    BlockedPeriod,
+    FestivalProgramItem,
+)
 from .serializers import (
     CarSerializer, LocationSerializer, TravelTimeSerializer, RideSerializer, RideListSerializer,
     RideAssignmentSerializer, ReservationSerializer, ReservationCreateSerializer,
     PassengerSerializer, DriverPassengerSerializer, AdminAddPassengerSerializer,
     BlockedPeriodSerializer,
+    FestivalProgramItemSerializer,
 )
 from .permissions import IsAdmin, IsDriver, IsDriverOrAdmin
 from accounts.models import User, DriverAvailability, hash_token
@@ -1025,6 +1036,23 @@ class AdminBlockedPeriodViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdmin]
 
 
+class AdminFestivalProgramViewSet(viewsets.ModelViewSet):
+    """Admin CRUD for festival program items."""
+    queryset = FestivalProgramItem.objects.all()
+    serializer_class = FestivalProgramItemSerializer
+    permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        if start:
+            queryset = queryset.filter(end_time__gte=start)
+        if end:
+            queryset = queryset.filter(start_time__lte=end)
+        return queryset
+
+
 class AdminDriverAvailabilityViewSet(viewsets.ModelViewSet):
     """Admin CRUD for driver availability schedules."""
     queryset = DriverAvailability.objects.all().select_related('driver')
@@ -1105,7 +1133,7 @@ def admin_passenger_list(request):
 @api_view(['GET'])
 @permission_classes([IsAdmin])
 def admin_driver_timeline(request):
-    """Get driver availability and ride assignments for timeline view."""
+    """Get driver availability, rides, and festival program for the timeline."""
     drivers = User.objects.filter(Q(role='driver') | Q(role='admin')).order_by('name')
 
     # Optional date range filters
@@ -1127,6 +1155,12 @@ def admin_driver_timeline(request):
             'end_time': bp.end_time.isoformat(),
             'reason': bp.reason,
         })
+
+    program_qs = FestivalProgramItem.objects.all()
+    if start:
+        program_qs = program_qs.filter(end_time__gte=start)
+    if end:
+        program_qs = program_qs.filter(start_time__lte=end)
 
     result = []
     for driver in drivers:
@@ -1174,6 +1208,7 @@ def admin_driver_timeline(request):
 
     return Response({
         'drivers': result,
+        'program_items': FestivalProgramItemSerializer(program_qs, many=True).data,
     })
 
 

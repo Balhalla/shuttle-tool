@@ -328,3 +328,21 @@ class BlockedPeriod(models.Model):
 
     def __str__(self):
         return f"Blocked: {self.driver.name} {self.start_time} – {self.end_time} ({self.reason})"
+
+
+class FestivalProgramItem(models.Model):
+    """An act, performance, or other item in the festival program."""
+    title = models.CharField(max_length=255)
+    location = models.CharField(max_length=255, blank=True, default='')
+    description = models.TextField(blank=True, default='')
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'festival_program_items'
+        ordering = ['start_time', 'title']
+
+    def __str__(self):
+        return f"{self.title} at {self.start_time.strftime('%Y-%m-%d %H:%M')}"

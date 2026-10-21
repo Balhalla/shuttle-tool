@@ -452,6 +452,48 @@ class ApiClient {
     );
   }
 
+  async adminGetFestivalProgram(params?: { start?: string; end?: string }) {
+    const query = new URLSearchParams();
+    if (params?.start) query.append('start', params.start);
+    if (params?.end) query.append('end', params.end);
+    const queryStr = query.toString();
+    return this.request<import('../types').FestivalProgramItem[]>(
+      `/admin/festival-program/${queryStr ? `?${queryStr}` : ''}`
+    );
+  }
+
+  async adminCreateFestivalProgramItem(data: {
+    title: string;
+    location?: string;
+    description?: string;
+    start_time: string;
+    end_time: string;
+  }) {
+    return this.request<import('../types').FestivalProgramItem>('/admin/festival-program/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminUpdateFestivalProgramItem(id: number, data: {
+    title?: string;
+    location?: string;
+    description?: string;
+    start_time?: string;
+    end_time?: string;
+  }) {
+    return this.request<import('../types').FestivalProgramItem>(`/admin/festival-program/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminDeleteFestivalProgramItem(id: number) {
+    return this.request<void>(`/admin/festival-program/${id}/`, {
+      method: 'DELETE',
+    });
+  }
+
   async adminGetSiteSettings() {
     return this.request<import('../types').SiteSettings>('/admin/settings/');
   }
