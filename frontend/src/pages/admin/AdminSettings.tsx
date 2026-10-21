@@ -7,6 +7,7 @@ export function AdminSettings() {
   const { refreshConfig } = useConfig();
   const [bannerEnabled, setBannerEnabled] = useState(false);
   const [bannerText, setBannerText] = useState('');
+  const [dayChangeTime, setDayChangeTime] = useState('06:00');
   const [googleRoutesApiKey, setGoogleRoutesApiKey] = useState('');
   const [baseLocationId, setBaseLocationId] = useState<number | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -21,6 +22,7 @@ export function AdminSettings() {
       .then(([data, locs]) => {
         setBannerEnabled(data.banner_enabled);
         setBannerText(data.banner_text);
+        setDayChangeTime(data.day_change_time);
         setGoogleRoutesApiKey(data.google_routes_api_key);
         setBaseLocationId(data.base_location_id);
         setShowDriverPhones(data.show_driver_phones);
@@ -37,12 +39,14 @@ export function AdminSettings() {
       const data = await api.adminUpdateSiteSettings({
         banner_enabled: bannerEnabled,
         banner_text: bannerText,
+        day_change_time: dayChangeTime,
         google_routes_api_key: googleRoutesApiKey,
         base_location_id: baseLocationId,
         show_driver_phones: showDriverPhones,
       });
       setBannerEnabled(data.banner_enabled);
       setBannerText(data.banner_text);
+      setDayChangeTime(data.day_change_time);
       setGoogleRoutesApiKey(data.google_routes_api_key);
       setBaseLocationId(data.base_location_id);
       setShowDriverPhones(data.show_driver_phones);
@@ -93,6 +97,21 @@ export function AdminSettings() {
             Preview: {bannerText}
           </div>
         )}
+
+        <h2>Day Boundary</h2>
+        <div className="form-group">
+          <label htmlFor="day-change-time">Day changes at</label>
+          <input
+            id="day-change-time"
+            type="time"
+            value={dayChangeTime}
+            onChange={(e) => setDayChangeTime(e.target.value)}
+            required
+          />
+          <small style={{ color: '#666', display: 'block' }}>
+            Dates and the driver timeline use this time as the start of each operational day.
+          </small>
+        </div>
 
         <h2>Google Routes API</h2>
         <div className="form-group">

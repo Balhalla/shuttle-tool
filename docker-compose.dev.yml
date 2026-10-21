@@ -60,6 +60,14 @@ services:
       - backend
     networks:
       - backend
+      - 02-traefik_rev-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=02-traefik_rev-proxy"
+      - "traefik.http.routers.shuttle-dev.rule=Host(`shuttle.lan.tomribbens.be`)"
+      - "traefik.http.routers.shuttle-dev.entrypoints=websecure"
+      - "traefik.http.routers.shuttle-dev.tls.certresolver=default"
+      - "traefik.http.services.shuttle-dev.loadbalancer.server.port=5173"
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
 volumes:
@@ -68,3 +76,5 @@ volumes:
 
 networks:
   backend:
+  02-traefik_rev-proxy:
+    external: true

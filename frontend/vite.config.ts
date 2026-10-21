@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    allowedHosts: ['shuttle.lan.tomribbens.be'],
+    hmr: {
+      clientPort: 443,
+    },
     proxy: {
       '/api': {
         target: process.env.VITE_API_TARGET || 'http://localhost:8000',

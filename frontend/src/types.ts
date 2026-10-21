@@ -189,6 +189,7 @@ export interface DriverTimeline {
 export interface SiteSettings {
   banner_enabled: boolean;
   banner_text: string;
+  day_change_time: string;
   google_routes_api_key: string;
   base_location_id: number | null;
   show_driver_phones: boolean;

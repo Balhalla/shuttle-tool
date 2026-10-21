@@ -2,7 +2,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from datetime import timedelta
+from datetime import time, timedelta
 
 
 class Car(models.Model):
@@ -285,6 +285,10 @@ class SiteSettings(models.Model):
     """Singleton model for site-wide settings."""
     banner_enabled = models.BooleanField(default=False)
     banner_text = models.TextField(blank=True, default='')
+    day_change_time = models.TimeField(
+        default=time(6, 0),
+        help_text='Time at which the operational day changes',
+    )
     google_routes_api_key = models.CharField(max_length=255, blank=True, default='')
     base_location = models.ForeignKey(
         'Location', null=True, blank=True, on_delete=models.SET_NULL,

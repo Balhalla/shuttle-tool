@@ -85,13 +85,14 @@ def public_ride_list(request):
     if destination_id:
         rides = rides.filter(destination_id=destination_id)
     if date:
-        # Parse the date and build a timezone-aware range:
-        # from midnight on the selected date to 04:00 the following day
+        # A selected operational day starts and ends at the configured
+        # day-change time rather than at calendar midnight.
         date_obj = datetime.strptime(date, '%Y-%m-%d').date()
-        day_start = timezone.make_aware(datetime.combine(date_obj, datetime.min.time()))
+        day_change_time = SiteSettings.get().day_change_time
+        day_start = timezone.make_aware(datetime.combine(date_obj, day_change_time))
         day_end = timezone.make_aware(
-            datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
-        ) + timedelta(hours=4)
+            datetime.combine(date_obj + timedelta(days=1), day_change_time)
+        )
         rides = rides.filter(departure_time__gte=day_start, departure_time__lt=day_end)
 
     # Filter out rides where all drivers have left
@@ -1185,6 +1186,7 @@ def admin_site_settings(request):
         return Response({
             'banner_enabled': site.banner_enabled,
             'banner_text': site.banner_text,
+            'day_change_time': site.day_change_time.strftime('%H:%M'),
             'google_routes_api_key': site.google_routes_api_key,
             'base_location_id': site.base_location_id,
             'show_driver_phones': site.show_driver_phones,
@@ -1194,6 +1196,15 @@ def admin_site_settings(request):
         site.banner_enabled = bool(request.data['banner_enabled'])
     if 'banner_text' in request.data:
         site.banner_text = request.data['banner_text']
+    if 'day_change_time' in request.data:
+        raw_day_change_time = str(request.data['day_change_time'])
+        try:
+            site.day_change_time = datetime.strptime(raw_day_change_time, '%H:%M').time()
+        except ValueError:
+            return Response(
+                {'error': 'day_change_time must use HH:MM format'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     if 'google_routes_api_key' in request.data:
         site.google_routes_api_key = request.data['google_routes_api_key']
     if 'base_location_id' in request.data:
@@ -1205,6 +1216,7 @@ def admin_site_settings(request):
     return Response({
         'banner_enabled': site.banner_enabled,
         'banner_text': site.banner_text,
+        'day_change_time': site.day_change_time.strftime('%H:%M'),
         'google_routes_api_key': site.google_routes_api_key,
         'base_location_id': site.base_location_id,
         'show_driver_phones': site.show_driver_phones,
