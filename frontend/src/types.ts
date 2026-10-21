@@ -20,6 +20,7 @@ export interface User {
 export interface Location {
   id: number;
   name: string;
+  short_name: string;
   description: string;
   latitude: string | null;
   longitude: string | null;
@@ -167,6 +168,8 @@ export interface TimelineAssignment {
   departure_time: string;
   is_vip: boolean;
   car_name: string;
+  reserved_seats: number;
+  total_seats: number;
   has_departed: boolean;
 }
 
@@ -203,6 +206,8 @@ export interface TimelineUnassignedRide {
   destination: string;
   departure_time: string;
   is_vip: boolean;
+  reserved_seats: number;
+  total_seats: number;
 }
 
 export interface SiteSettings {

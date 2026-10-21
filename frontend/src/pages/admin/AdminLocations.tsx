@@ -10,6 +10,7 @@ export function AdminLocations() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: '',
+    short_name: '',
     description: '',
     latitude: '',
     longitude: '',
@@ -60,6 +61,7 @@ export function AdminLocations() {
   const handleEdit = (location: Location) => {
     setForm({
       name: location.name,
+      short_name: location.short_name,
       description: location.description,
       latitude: location.latitude || '',
       longitude: location.longitude || '',
@@ -80,7 +82,7 @@ export function AdminLocations() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', description: '', latitude: '', longitude: '' });
+    setForm({ name: '', short_name: '', description: '', latitude: '', longitude: '' });
     setEditingId(null);
     setShowForm(false);
   };
@@ -114,6 +116,20 @@ export function AdminLocations() {
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
                 />
+              </div>
+              <div className="form-group">
+                <label htmlFor="short-name">Short name</label>
+                <input
+                  id="short-name"
+                  type="text"
+                  value={form.short_name}
+                  onChange={(e) => setForm({ ...form, short_name: e.target.value })}
+                  maxLength={4}
+                  required
+                />
+                <small style={{ color: '#666' }}>
+                  Up to 4 characters, used in the timeline.
+                </small>
               </div>
               <div className="form-group">
                 <label htmlFor="description">Description</label>
@@ -177,6 +193,7 @@ export function AdminLocations() {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Short name</th>
             <th>Description</th>
             <th>Coordinates</th>
             <th>Actions</th>
@@ -186,6 +203,7 @@ export function AdminLocations() {
           {locations.map((location) => (
             <tr key={location.id}>
               <td>{location.name}</td>
+              <td>{location.short_name}</td>
               <td>{location.description || '-'}</td>
               <td>
                 {location.latitude && location.longitude ? (

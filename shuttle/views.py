@@ -15,7 +15,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db import transaction
 
 from .models import (
@@ -1250,6 +1250,30 @@ def admin_driver_timeline(request):
         departure_time__lt=end,
         assignments__isnull=True,
     ).select_related('origin', 'destination')
+    visible_ride_ids = set(
+        RideAssignment.objects.filter(
+            ride__departure_time__gte=start,
+            ride__departure_time__lt=end,
+        ).values_list('ride_id', flat=True)
+    )
+    visible_ride_ids.update(ride.id for ride in unassigned_rides)
+
+    total_seats_by_ride: dict[int, int] = defaultdict(int)
+    for ride_id, capacity in RideAssignment.objects.filter(
+        ride_id__in=visible_ride_ids,
+    ).values_list('ride_id', 'car__capacity'):
+        total_seats_by_ride[ride_id] += capacity
+
+    reserved_seats_by_ride = dict(
+        Reservation.objects.filter(
+            ride_id__in=visible_ride_ids,
+        ).filter(
+            Q(status='confirmed')
+            | Q(status='pending', expires_at__gt=timezone.now())
+        ).values('ride_id').annotate(total=Count('id')).values_list(
+            'ride_id', 'total',
+        )
+    )
 
     result = []
     for driver in drivers:
@@ -1285,11 +1309,13 @@ def admin_driver_timeline(request):
                 {
                     'id': a.id,
                     'ride_id': a.ride.id,
-                    'origin': a.ride.origin.name,
-                    'destination': a.ride.destination.name,
+                    'origin': a.ride.origin.short_name,
+                    'destination': a.ride.destination.short_name,
                     'departure_time': a.ride.departure_time.isoformat(),
                     'is_vip': a.ride.is_vip,
                     'car_name': a.car.name,
+                    'reserved_seats': reserved_seats_by_ride.get(a.ride_id, 0),
+                    'total_seats': total_seats_by_ride.get(a.ride_id, 0),
                     'has_departed': a.has_departed,
                 }
                 for a in assignments
@@ -1303,10 +1329,12 @@ def admin_driver_timeline(request):
         'unassigned_rides': [
             {
                 'id': ride.id,
-                'origin': ride.origin.name,
-                'destination': ride.destination.name,
+                'origin': ride.origin.short_name,
+                'destination': ride.destination.short_name,
                 'departure_time': ride.departure_time.isoformat(),
                 'is_vip': ride.is_vip,
+                'reserved_seats': reserved_seats_by_ride.get(ride.id, 0),
+                'total_seats': total_seats_by_ride.get(ride.id, 0),
             }
             for ride in unassigned_rides
         ],

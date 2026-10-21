@@ -12,6 +12,7 @@ from shuttle.models import (
     Car,
     Ride,
     RideAssignment,
+    Reservation,
     FestivalProgramItem,
     SiteSettings,
 )
@@ -25,8 +26,14 @@ class CsvImportTestCase(TestCase):
         )
         self.client.force_authenticate(user=self.admin)
 
-        self.loc_festival = Location.objects.create(name='Festival Grounds')
-        self.loc_camping = Location.objects.create(name='Camping North')
+        self.loc_festival = Location.objects.create(
+            name='Festival Grounds',
+            short_name='FEST',
+        )
+        self.loc_camping = Location.objects.create(
+            name='Camping North',
+            short_name='CAMP',
+        )
 
         self.driver = User.objects.create_user(
             email='alice@example.com', name='Alice', role='driver'
@@ -395,8 +402,14 @@ class RideAssignmentTimelineTestCase(TestCase):
             role='driver',
             default_car=self.car_two,
         )
-        self.origin = Location.objects.create(name='Festival Grounds')
-        self.destination = Location.objects.create(name='Camping North')
+        self.origin = Location.objects.create(
+            name='Festival Grounds',
+            short_name='FEST',
+        )
+        self.destination = Location.objects.create(
+            name='Camping North',
+            short_name='CAMP',
+        )
         self.ride = Ride.objects.create(
             origin=self.origin,
             destination=self.destination,
@@ -484,3 +497,63 @@ class RideAssignmentTimelineTestCase(TestCase):
             [ride['id'] for ride in response.data['unassigned_rides']],
             [unassigned_ride.id],
         )
+        self.assertEqual(response.data['unassigned_rides'][0]['origin'], 'FEST')
+        self.assertEqual(response.data['unassigned_rides'][0]['destination'], 'CAMP')
+
+    @patch('shuttle.views.timezone.localtime')
+    def test_timeline_includes_reserved_and_total_ride_places(self, mock_localtime):
+        mock_localtime.return_value = datetime(
+            2026, 10, 21, 12, 0, tzinfo=ZoneInfo('Europe/Brussels')
+        )
+        Reservation.objects.create(
+            ride=self.ride,
+            guest_name='Confirmed Passenger',
+            status='confirmed',
+        )
+        Reservation.objects.create(
+            ride=self.ride,
+            guest_name='Cancelled Passenger',
+            status='cancelled',
+        )
+
+        response = self.client.get('/api/admin/driver-timeline/')
+
+        self.assertEqual(response.status_code, 200)
+        assignment = next(
+            driver['assignments'][0]
+            for driver in response.data['drivers']
+            if driver['assignments']
+        )
+        self.assertEqual(assignment['reserved_seats'], 1)
+        self.assertEqual(assignment['total_seats'], self.car_one.capacity)
+
+
+class LocationShortNameTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            email='location-admin@example.com',
+            name='Location Admin',
+            role='admin',
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_admin_can_create_location_with_short_name(self):
+        response = self.client.post(
+            '/api/admin/locations/',
+            {'name': 'Festival Grounds', 'short_name': 'FEST'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['short_name'], 'FEST')
+
+    def test_short_name_cannot_exceed_four_characters(self):
+        response = self.client.post(
+            '/api/admin/locations/',
+            {'name': 'Festival Grounds', 'short_name': 'FESTI'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('short_name', response.data)

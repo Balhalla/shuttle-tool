@@ -33,7 +33,7 @@ type TimelineBlockLayout = {
   columnCount: number;
 };
 
-const TIME_AXIS_WIDTH = 110;
+const TIME_AXIS_WIDTH = 52;
 const PROGRAM_TRACK_WIDTH = 180;
 const UNASSIGNED_TRACK_WIDTH = 140;
 const DRIVER_TRACK_WIDTH = 150;
@@ -111,7 +111,6 @@ function buildTimelineDaySections(startMs: number, endMs: number) {
       top: ((dayStart.getTime() - startMs) / (endMs - startMs)) * 100,
       height: ((dayEndMs - dayStart.getTime()) / (endMs - startMs)) * 100,
       label: dayStart.toLocaleDateString('en-GB', {
-        weekday: 'short',
         day: 'numeric',
         month: 'short',
       }),
@@ -778,8 +777,7 @@ export function AdminDriverTimeline() {
 
   // Generate time markers
   const markers: Date[] = [];
-  const markerInterval = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 8))); // ~8 markers
-  const markerStep = markerInterval * 60 * 60 * 1000;
+  const markerStep = 60 * 60 * 1000;
   let markerTime = new Date(Math.ceil(startMs / markerStep) * markerStep);
   while (markerTime.getTime() < endMs) {
     markers.push(new Date(markerTime));
@@ -1095,7 +1093,7 @@ export function AdminDriverTimeline() {
                   className="timeline-marker"
                   style={{ top: `${((m.getTime() - startMs) / totalMs) * 100}%` }}
                 >
-                  <span className="marker-label">{formatHour(m)}</span>
+                  <span className="marker-label">{formatTime(m)}</span>
                 </div>
               ))}
             </div>
@@ -1179,11 +1177,21 @@ export function AdminDriverTimeline() {
                   columnCount: 1,
                 };
                 const rideWidth = 100 / rideLayout.columnCount;
+                const capacityLabel = (
+                  ride.total_seats > 0
+                  && ride.reserved_seats > ride.total_seats
+                )
+                  ? `Over capacity: ${ride.reserved_seats} reservations for ${ride.total_seats} places`
+                  : '';
+                const isFull = (
+                  ride.total_seats > 0
+                  && ride.reserved_seats === ride.total_seats
+                );
                 return (
                   <button
                     type="button"
                     key={`unassigned-${ride.id}`}
-                    className={`timeline-block assignment unassigned-ride draggable-unassigned${ride.is_vip ? ' vip' : ''}${rideLayout.columnCount > 1 ? ' split-lane' : ''}`}
+                    className={`timeline-block assignment unassigned-ride draggable-unassigned${ride.is_vip ? ' vip' : ''}${rideLayout.columnCount > 1 ? ' split-lane' : ''}${capacityLabel ? ' timeline-assignment-warning' : ''}${isFull ? ' timeline-assignment-full' : ''}`}
                     draggable
                     style={{
                       top: `${top}%`,
@@ -1191,12 +1199,28 @@ export function AdminDriverTimeline() {
                       width: `calc(${rideWidth}% - 4px)`,
                       right: 'auto',
                     }}
-                    title={`${formatHour(departure)} · ${ride.origin} → ${ride.destination} · No driver assigned`}
+                    title={`${formatHour(departure)} · ${ride.origin} → ${ride.destination} · No driver assigned · ${ride.reserved_seats}/${ride.total_seats} places reserved${capacityLabel ? `\n⚠ ${capacityLabel}` : ''}`}
                     onClick={() => navigate(`/admin/rides/${ride.id}/passengers`)}
                     onDragStart={(event) => handleUnassignedRideDragStart(event, ride)}
                     onDragEnd={handleUnassignedRideDragEnd}
                   >
-                    <span className="timeline-assignment-time">{formatTime(departure)}</span>
+                    <span className="timeline-assignment-time">
+                      {formatTime(departure)}
+                    </span>
+                    <span className="timeline-assignment-top-right">
+                      {capacityLabel && (
+                        <span
+                          className="timeline-assignment-warning-badge"
+                          aria-label={capacityLabel}
+                          title={capacityLabel}
+                        >
+                          !
+                        </span>
+                      )}
+                      <span className={`timeline-assignment-places${isFull ? ' full' : ''}`}>
+                        {ride.reserved_seats}/{ride.total_seats}
+                      </span>
+                    </span>
                     <span className="timeline-assignment-route">
                       {ride.origin} → {ride.destination}
                     </span>
@@ -1312,6 +1336,17 @@ export function AdminDriverTimeline() {
                   const departure = new Date(assign.departure_time);
                   const overlap = getAssignmentOverlapInfo(item, assign);
                   const overlapLabel = overlap.label;
+                  const capacityLabel = (
+                    assign.total_seats > 0
+                    && assign.reserved_seats > assign.total_seats
+                  )
+                    ? `Over capacity: ${assign.reserved_seats} reservations for ${assign.total_seats} places`
+                    : '';
+                  const isFull = (
+                    assign.total_seats > 0
+                    && assign.reserved_seats === assign.total_seats
+                  );
+                  const warningLabel = [overlapLabel, capacityLabel].filter(Boolean).join('\n');
                   const assignmentLayout = laneLayouts.get(item.driver.id)?.get(`assignment-${assign.id}`) ?? {
                     column: 0,
                     columnCount: 1,
@@ -1322,7 +1357,7 @@ export function AdminDriverTimeline() {
                     <button
                       type="button"
                       key={`assign-${assign.id}`}
-                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}${hoveredRideId === assign.ride_id ? ' same-ride-highlight' : ''}${overlapLabel ? ' timeline-assignment-overlap' : ''}${assignmentLayout.columnCount > 1 ? ' split-lane' : ''}`}
+                      className={`timeline-block assignment${assign.is_vip ? ' vip' : ''}${assign.has_departed ? ' departed' : ''}${!assign.has_departed ? ' draggable-assignment' : ''}${hoveredRideId === assign.ride_id ? ' same-ride-highlight' : ''}${warningLabel ? ' timeline-assignment-warning' : ''}${isFull ? ' timeline-assignment-full' : ''}${assignmentLayout.columnCount > 1 ? ' split-lane' : ''}`}
                       draggable={!assign.has_departed}
                       style={{
                         top: `${top}%`,
@@ -1330,7 +1365,7 @@ export function AdminDriverTimeline() {
                         width: `calc(${assignmentWidth}% - ${4 + blockedIndentPx}px)`,
                         right: 'auto',
                       }}
-                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name}${assign.is_vip ? ' · VIP' : ''}${overlapLabel ? `\n⚠ ${overlapLabel}` : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
+                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name} · ${assign.reserved_seats}/${assign.total_seats} places reserved${assign.is_vip ? ' · VIP' : ''}${warningLabel ? `\n⚠ ${warningLabel}` : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
                       onClick={() => navigate(`/admin/rides/${assign.ride_id}/passengers`)}
                       onMouseEnter={() => setHoveredRideId(assign.ride_id)}
                       onMouseLeave={() => setHoveredRideId(null)}
@@ -1343,16 +1378,21 @@ export function AdminDriverTimeline() {
                       )}
                       onDragEnd={handleAssignmentDragEnd}
                     >
-                      {overlapLabel && (
-                        <span
-                          className="timeline-assignment-overlap-badge"
-                          aria-label={overlapLabel}
-                          title={overlapLabel}
-                        >
-                          !
-                        </span>
-                      )}
                       <span className="timeline-assignment-time">{formatTime(departure)}</span>
+                      <span className="timeline-assignment-top-right">
+                        {warningLabel && (
+                          <span
+                            className="timeline-assignment-warning-badge"
+                            aria-label={warningLabel}
+                            title={warningLabel}
+                          >
+                            !
+                          </span>
+                        )}
+                        <span className={`timeline-assignment-places${isFull ? ' full' : ''}`}>
+                          {assign.reserved_seats}/{assign.total_seats}
+                        </span>
+                      </span>
                       <span className="timeline-assignment-route">
                         {assign.origin} → {assign.destination}
                       </span>
@@ -1399,6 +1439,15 @@ export function AdminDriverTimeline() {
               border: '2px dashed #dc3545',
             }}
           /> Overlap / conflict
+        </span>
+        <span className="legend-item">
+          <span
+            className="legend-swatch"
+            style={{
+              backgroundColor: '#d4edda',
+              border: '2px solid #2f7d48',
+            }}
+          /> Full ride
         </span>
       </div>
     </div>
