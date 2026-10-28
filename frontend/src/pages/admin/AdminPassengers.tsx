@@ -104,6 +104,7 @@ export function AdminPassengers() {
                           <tr>
                             <th>Route</th>
                             <th>Departure</th>
+                            <th>Seats</th>
                             <th>Status</th>
                             <th>VIP</th>
                             <th></th>
@@ -114,6 +115,7 @@ export function AdminPassengers() {
                             <tr key={ride.reservation_id}>
                               <td>{ride.origin} → {ride.destination}</td>
                               <td>{formatTime(ride.departure_time)}</td>
+                              <td>{ride.seats}</td>
                               <td>
                                 <span className={`status-badge status-${ride.status}`}>
                                   {ride.status}

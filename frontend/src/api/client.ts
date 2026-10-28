@@ -117,11 +117,15 @@ class ApiClient {
   async getPublicRides(params?: {
     origin?: number;
     destination?: number;
+    pickup?: number;
+    dropoff?: number;
     date?: string;
   }) {
     const query = new URLSearchParams();
     if (params?.origin) query.append('origin', params.origin.toString());
     if (params?.destination) query.append('destination', params.destination.toString());
+    if (params?.pickup) query.append('pickup', params.pickup.toString());
+    if (params?.dropoff) query.append('dropoff', params.dropoff.toString());
     if (params?.date) query.append('date', params.date);
     const queryStr = query.toString();
     return this.request<import('../types').Ride[]>(
@@ -129,11 +133,21 @@ class ApiClient {
     );
   }
 
-  async getRideDetail(rideId: number) {
-    return this.request<import('../types').Ride>(`/rides/${rideId}/`);
+  async getRideDetail(rideId: number, pickupPosition?: number, dropoffPosition?: number) {
+    const query = new URLSearchParams();
+    if (pickupPosition !== undefined) query.set('pickup_position', String(pickupPosition));
+    if (dropoffPosition !== undefined) query.set('dropoff_position', String(dropoffPosition));
+    return this.request<import('../types').Ride>(`/rides/${rideId}/${query.size ? `?${query}` : ''}`);
   }
 
-  async reserveRide(rideId: number, data: { email: string; name: string }) {
+  async reserveRide(rideId: number, data: {
+    email: string;
+    name: string;
+    phone: string;
+    seats: number;
+    pickup_position: number;
+    dropoff_position: number;
+  }) {
     return this.request<{
       message: string;
       reservation_id?: number;
@@ -305,8 +319,7 @@ class ApiClient {
   }
 
   async adminCreateRide(data: {
-    origin_id: number;
-    destination_id: number;
+    stop_ids: number[];
     departure_time: string;
     is_vip: boolean;
   }) {
@@ -316,7 +329,7 @@ class ApiClient {
     });
   }
 
-  async adminUpdateRide(id: number, data: Partial<import('../types').Ride>) {
+  async adminUpdateRide(id: number, data: Partial<import('../types').Ride> & { stop_ids?: number[] }) {
     return this.request<import('../types').Ride>(`/admin/rides/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -342,7 +355,15 @@ class ApiClient {
     return this.request<import('../types').Passenger[]>(`/admin/rides/${rideId}/passengers/`);
   }
 
-  async adminAddPassenger(rideId: number, data: { name: string; email?: string; phone?: string }) {
+  async adminAddPassenger(rideId: number, data: {
+    name: string;
+    email?: string;
+    phone?: string;
+    user_id?: number;
+    seats?: number;
+    pickup_position?: number;
+    dropoff_position?: number;
+  }) {
     return this.request<import('../types').Passenger>(`/admin/rides/${rideId}/add_passenger/`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -423,8 +444,9 @@ class ApiClient {
     });
   }
 
-  async adminGetUsers() {
-    return this.request<import('../types').User[]>('/admin/users/');
+  async adminGetUsers(role?: import('../types').User['role']) {
+    const query = role ? `?role=${encodeURIComponent(role)}` : '';
+    return this.request<import('../types').User[]>(`/admin/users/${query}`);
   }
 
   async adminCreateUser(data: { email: string; name: string; role: string; phone?: string }) {

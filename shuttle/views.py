@@ -15,7 +15,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from django.db.models import Count, Q
+from django.db.models import Q, Sum, F, Max
 from django.db import transaction
 
 from .models import (
@@ -24,6 +24,7 @@ from .models import (
     TravelTime,
     Ride,
     RideAssignment,
+    RideStop,
     Reservation,
     SiteSettings,
     BlockedPeriod,
@@ -84,7 +85,7 @@ def public_ride_list(request):
     rides = Ride.objects.filter(
         is_vip=False,
         departure_time__gt=grace_period
-    ).select_related('origin', 'destination').prefetch_related('assignments')
+    ).prefetch_related('route_stops__location', 'assignments')
 
     # Optional filters
     origin_id = request.query_params.get('origin')
@@ -92,9 +93,14 @@ def public_ride_list(request):
     date = request.query_params.get('date')
 
     if origin_id:
-        rides = rides.filter(origin_id=origin_id)
+        rides = rides.filter(route_stops__position=0, route_stops__location_id=origin_id)
     if destination_id:
-        rides = rides.filter(destination_id=destination_id)
+        rides = rides.annotate(_last_stop_position=Max('route_stops__position')).filter(
+            route_stops__position=F('_last_stop_position'),
+            route_stops__location_id=destination_id,
+        )
+    pickup_id = request.query_params.get('pickup')
+    dropoff_id = request.query_params.get('dropoff')
     if date:
         # A selected operational day starts and ends at the configured
         # day-change time rather than at calendar midnight.
@@ -107,12 +113,24 @@ def public_ride_list(request):
         rides = rides.filter(departure_time__gte=day_start, departure_time__lt=day_end)
 
     # Filter out rides where all drivers have left
-    visible_rides = [
-        ride for ride in rides
-        if not ride.all_departed
-    ]
+    visible_rides = []
+    for ride in rides.distinct().prefetch_related('route_stops__location'):
+        if ride.assignments.filter(has_departed=True).exists():
+            continue
+        stop_list = ride.ordered_stops
+        positions = {}
+        for stop in stop_list:
+            positions.setdefault(stop.location_id, []).append(stop.position)
+        if pickup_id and dropoff_id:
+            try:
+                p, d = int(pickup_id), int(dropoff_id)
+            except ValueError:
+                continue
+            if p not in positions or d not in positions or not any(a < b for a in positions[p] for b in positions[d]):
+                continue
+        visible_rides.append(ride)
 
-    serializer = RideListSerializer(visible_rides, many=True)
+    serializer = RideListSerializer(visible_rides, many=True, context={'request': request})
     return Response(serializer.data)
 
 
@@ -121,7 +139,7 @@ def public_ride_list(request):
 def public_ride_detail(request, ride_id):
     """Get details of a specific public ride."""
     ride = get_object_or_404(Ride, id=ride_id, is_vip=False)
-    data = RideSerializer(ride).data
+    data = RideSerializer(ride, context={'request': request}).data
     # Include driver phone numbers if site setting is enabled
     site = SiteSettings.get()
     if site.show_driver_phones and ride.assignments.exists():
@@ -138,15 +156,14 @@ def public_ride_detail(request, ride_id):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@transaction.atomic
 def reserve_ride(request, ride_id):
     """Create a reservation. Auto-confirms for authenticated users, sends email for guests."""
-    ride = get_object_or_404(Ride, id=ride_id, is_vip=False)
-
-    if ride.is_full:
-        return Response(
-            {'error': 'This ride is fully booked'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    ride = get_object_or_404(
+        Ride.objects.select_for_update(),
+        id=ride_id,
+        is_vip=False,
+    )
 
     if not ride.registration_open:
         return Response(
@@ -166,6 +183,15 @@ def reserve_ride(request, ride_id):
     email = serializer.validated_data['email']
     name = serializer.validated_data['name']
     phone = serializer.validated_data['phone']
+    seats = serializer.validated_data['seats']
+    pickup_position = serializer.validated_data['pickup_position']
+    stops = ride.ordered_stops
+    dropoff_position = serializer.validated_data.get('dropoff_position', len(stops) - 1)
+    if (pickup_position >= dropoff_position or dropoff_position >= len(stops)):
+        return Response({'error': 'Choose a pickup and a later drop-off stop on this route.'}, status=status.HTTP_400_BAD_REQUEST)
+    remaining = ride.seats_remaining_for(pickup_position, dropoff_position)
+    if seats > remaining:
+        return Response({'error': f'Only {remaining} seat{"s" if remaining != 1 else ""} remaining for that part of the route.'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Check if user is authenticated
     user = request.user if request.user.is_authenticated else None
@@ -200,6 +226,9 @@ def reserve_ride(request, ride_id):
             guest_email=email,
             guest_name=name,
             guest_phone=phone,
+            seats=seats,
+            pickup_position=pickup_position,
+            dropoff_position=dropoff_position,
             status='confirmed'
         )
 
@@ -230,6 +259,9 @@ def reserve_ride(request, ride_id):
         guest_email=email,
         guest_name=name,
         guest_phone=phone,
+        seats=seats,
+        pickup_position=pickup_position,
+        dropoff_position=dropoff_position,
         status='pending',
         confirmation_token=hash_token(raw_confirmation_token)
     )
@@ -244,9 +276,10 @@ def reserve_ride(request, ride_id):
 
 Please confirm your shuttle reservation:
 
-From: {ride.origin.name}
-To: {ride.destination.name}
+From: {stops[pickup_position].location.name}
+To: {stops[dropoff_position].location.name}
 Departure: {timezone.localtime(ride.departure_time).strftime('%Y-%m-%d %H:%M')}
+Seats: {seats}
 
 Click here to confirm: {confirm_link}
 
@@ -353,8 +386,8 @@ def my_reservations(request):
     reservations = Reservation.objects.filter(
         Q(user=request.user) | Q(guest_email=request.user.email),
         status='confirmed'
-    ).select_related('ride__origin', 'ride__destination').prefetch_related(
-        'ride__assignments'
+    ).prefetch_related(
+        'ride__route_stops__location', 'ride__assignments'
     ).order_by('ride__departure_time')
 
     serializer = ReservationSerializer(reservations, many=True)
@@ -398,7 +431,7 @@ def driver_rides(request):
 
     rides = Ride.objects.filter(
         id__in=ride_ids
-    ).select_related('origin', 'destination').prefetch_related('assignments__driver', 'assignments__car').order_by('-departure_time')
+    ).prefetch_related('route_stops__location', 'assignments__driver', 'assignments__car').order_by('-departure_time')
     serializer = RideSerializer(rides, many=True)
     return Response(serializer.data)
 
@@ -482,7 +515,7 @@ def send_discord_notification(ride, driver, car, passenger_count):
                     {'name': 'Driver', 'value': driver.name, 'inline': True},
                     {'name': 'Car', 'value': f"{car.name} ({car.capacity} seats)", 'inline': True},
                     {'name': 'Passengers', 'value': str(passenger_count), 'inline': True},
-                    {'name': 'Route', 'value': f"{ride.origin.name} → {ride.destination.name}", 'inline': False},
+                    {'name': 'Route', 'value': ' → '.join(stop.location.name for stop in ride.ordered_stops), 'inline': False},
                     {'name': 'Scheduled Time', 'value': departure_str, 'inline': True},
                 ],
             }]
@@ -512,7 +545,9 @@ def driver_depart(request, ride_id):
 
     # Send Discord notification
     ride = assignment.ride
-    passenger_count = ride.reservations.filter(status='confirmed').count()
+    passenger_count = ride.reservations.filter(status='confirmed').aggregate(
+        total=Sum('seats')
+    )['total'] or 0
     send_discord_notification(ride, request.user, assignment.car, passenger_count)
 
     return Response({
@@ -581,16 +616,16 @@ class AdminRideViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Include deleted rides when explicitly requested."""
         if self.action == 'trash':
-            return Ride.all_objects.filter(is_deleted=True).select_related(
-                'origin', 'destination'
-            ).prefetch_related('assignments__driver', 'assignments__car')
+            return Ride.all_objects.filter(is_deleted=True).prefetch_related(
+                'route_stops__location', 'assignments__driver', 'assignments__car'
+            )
         if self.action == 'restore':
-            return Ride.all_objects.all().select_related(
-                'origin', 'destination'
-            ).prefetch_related('assignments__driver', 'assignments__car')
-        return Ride.objects.all().select_related(
-            'origin', 'destination'
-        ).prefetch_related('assignments__driver', 'assignments__car')
+            return Ride.all_objects.all().prefetch_related(
+                'route_stops__location', 'assignments__driver', 'assignments__car'
+            )
+        return Ride.objects.all().prefetch_related(
+            'route_stops__location', 'assignments__driver', 'assignments__car'
+        )
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -625,6 +660,8 @@ class AdminRideViewSet(viewsets.ModelViewSet):
     def add_passenger(self, request, pk=None):
         """Add a passenger to a ride (admin only, auto-confirmed, allows overbooking)."""
         ride = self.get_object()
+        if not ride.registration_open:
+            return Response({'error': 'New passengers cannot be added after the ride departs.'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = AdminAddPassengerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -632,10 +669,25 @@ class AdminRideViewSet(viewsets.ModelViewSet):
         name = serializer.validated_data['name']
         email = serializer.validated_data.get('email', '')
         phone = serializer.validated_data.get('phone', '')
+        user_id = serializer.validated_data.get('user_id')
+        seats = serializer.validated_data.get('seats', 1)
+        pickup_position = serializer.validated_data['pickup_position']
+        dropoff_position = serializer.validated_data.get('dropoff_position', len(ride.ordered_stops) - 1)
+        if pickup_position >= dropoff_position or dropoff_position >= len(ride.ordered_stops):
+            return Response({'error': 'Choose a pickup and a later drop-off stop on this route.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # If email provided, get or create a user account so they can log in
         user = None
-        if email:
+        if user_id:
+            user = User.objects.filter(id=user_id, role='vip').first()
+            if not user:
+                return Response(
+                    {'error': 'VIP user not found'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            email = user.email
+            phone = phone or user.phone
+        elif email:
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={'name': name, 'phone': phone, 'role': 'public'}
@@ -657,6 +709,9 @@ class AdminRideViewSet(viewsets.ModelViewSet):
             guest_name=name,
             guest_email=email,
             guest_phone=phone,
+            seats=seats,
+            pickup_position=pickup_position,
+            dropoff_position=dropoff_position,
             status='confirmed',
             added_by_admin=True
         )
@@ -997,6 +1052,9 @@ class AdminRideViewSet(viewsets.ModelViewSet):
 
         group_errors = []
         for key, group_rows in groups.items():
+            sample = group_rows[0]
+            if not TravelTime.objects.filter(origin=sample['origin'], destination=sample['destination']).exists():
+                group_errors.append(f'Missing configured travel time for {sample["origin"].name} → {sample["destination"].name}')
             assignments = [(r['driver'], r['car']) for r in group_rows if r['driver'] and r['car']]
             # Check duplicate drivers within same ride
             seen_drivers = set()
@@ -1076,8 +1134,14 @@ class AdminDriverViewSet(viewsets.ModelViewSet):
 
 class AdminUserViewSet(viewsets.ModelViewSet):
     """Admin CRUD for all users (including role management)."""
-    queryset = User.objects.all().order_by('-created_at')
     permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        queryset = User.objects.all().order_by('-created_at')
+        role = self.request.query_params.get('role')
+        if role:
+            queryset = queryset.filter(role=role)
+        return queryset
 
     def get_serializer_class(self):
         from accounts.serializers import AdminUserSerializer
@@ -1155,7 +1219,7 @@ def admin_passenger_list(request):
     """List all unique passengers across all rides."""
     reservations = Reservation.objects.exclude(
         status='cancelled'
-    ).select_related('ride__origin', 'ride__destination', 'user')
+    ).select_related('user').prefetch_related('ride__route_stops__location')
 
     # Group by person (user_id or guest_email)
     passengers = {}
@@ -1182,11 +1246,14 @@ def admin_passenger_list(request):
         passengers[key]['rides'].append({
             'reservation_id': res.id,
             'ride_id': res.ride.id,
-            'origin': res.ride.origin.name,
-            'destination': res.ride.destination.name,
+            'origin': res.ride.ordered_stops[res.pickup_position].location.name,
+            'destination': res.ride.ordered_stops[res.dropoff_position].location.name,
             'departure_time': res.ride.departure_time.isoformat(),
             'status': res.status,
             'is_vip': res.ride.is_vip,
+            'seats': res.seats,
+            'pickup_position': res.pickup_position,
+            'dropoff_position': res.dropoff_position,
         })
 
     return Response(list(passengers.values()))
@@ -1249,7 +1316,7 @@ def admin_driver_timeline(request):
         departure_time__gte=start,
         departure_time__lt=end,
         assignments__isnull=True,
-    ).select_related('origin', 'destination')
+    ).prefetch_related('route_stops__location')
     visible_ride_ids = set(
         RideAssignment.objects.filter(
             ride__departure_time__gte=start,
@@ -1264,23 +1331,48 @@ def admin_driver_timeline(request):
     ).values_list('ride_id', 'car__capacity'):
         total_seats_by_ride[ride_id] += capacity
 
-    reserved_seats_by_ride = dict(
-        Reservation.objects.filter(
-            ride_id__in=visible_ride_ids,
-        ).filter(
-            Q(status='confirmed')
-            | Q(status='pending', expires_at__gt=timezone.now())
-        ).values('ride_id').annotate(total=Count('id')).values_list(
-            'ride_id', 'total',
+    reserved_seats_by_ride: dict[int, int] = defaultdict(int)
+    reservation_intervals_by_ride: dict[int, list] = defaultdict(list)
+    passengers_by_ride: dict[int, list] = defaultdict(list)
+    active_reservations = Reservation.objects.filter(
+        ride_id__in=visible_ride_ids,
+    ).filter(
+        Q(status='confirmed')
+        | Q(status='pending', expires_at__gt=timezone.now())
+    ).select_related('user').order_by('created_at')
+    for reservation in active_reservations:
+        reservation_intervals_by_ride[reservation.ride_id].append(
+            (reservation.pickup_position, reservation.dropoff_position, reservation.seats)
         )
-    )
+        passengers_by_ride[reservation.ride_id].append({
+            'name': (
+                reservation.user.name
+                if reservation.user
+                else reservation.guest_name
+            ),
+            'seats': reservation.seats,
+            'status': reservation.status,
+        })
+
+    route_last_positions: dict[int, int] = {}
+    for ride_id, position in RideStop.objects.filter(
+        ride_id__in=visible_ride_ids,
+    ).values_list('ride_id', 'position'):
+        route_last_positions[ride_id] = max(route_last_positions.get(ride_id, 0), position)
+    for ride_id, intervals in reservation_intervals_by_ride.items():
+        last_position = route_last_positions.get(ride_id, 1)
+        reserved_seats_by_ride[ride_id] = max(
+            (sum(seats for pickup, dropoff, seats in intervals if pickup <= segment < dropoff)
+             for segment in range(last_position)),
+            default=0,
+        )
 
     result = []
     for driver in drivers:
         availabilities = DriverAvailability.objects.filter(driver=driver)
         assignments = RideAssignment.objects.filter(driver=driver).select_related(
-            'ride__origin', 'ride__destination', 'car'
-        )
+            'car', 'ride'
+        ).prefetch_related('ride__route_stops__location')
 
         availabilities = availabilities.filter(
             end_time__gte=start,
@@ -1311,11 +1403,16 @@ def admin_driver_timeline(request):
                     'ride_id': a.ride.id,
                     'origin': a.ride.origin.short_name,
                     'destination': a.ride.destination.short_name,
+                    'origin_name': a.ride.origin.name,
+                    'destination_name': a.ride.destination.name,
+                    'route_label': ' → '.join(stop.location.name for stop in a.ride.ordered_stops),
                     'departure_time': a.ride.departure_time.isoformat(),
+                    'estimated_end_time': (a.ride.departure_time + timedelta(minutes=a.ride.total_travel_minutes or 52)).isoformat(),
                     'is_vip': a.ride.is_vip,
                     'car_name': a.car.name,
                     'reserved_seats': reserved_seats_by_ride.get(a.ride_id, 0),
                     'total_seats': total_seats_by_ride.get(a.ride_id, 0),
+                    'passengers': passengers_by_ride.get(a.ride_id, []),
                     'has_departed': a.has_departed,
                 }
                 for a in assignments
@@ -1331,10 +1428,15 @@ def admin_driver_timeline(request):
                 'id': ride.id,
                 'origin': ride.origin.short_name,
                 'destination': ride.destination.short_name,
+                'origin_name': ride.origin.name,
+                'destination_name': ride.destination.name,
+                'route_label': ' → '.join(stop.location.name for stop in ride.ordered_stops),
                 'departure_time': ride.departure_time.isoformat(),
+                'estimated_end_time': (ride.departure_time + timedelta(minutes=ride.total_travel_minutes or 52)).isoformat(),
                 'is_vip': ride.is_vip,
                 'reserved_seats': reserved_seats_by_ride.get(ride.id, 0),
                 'total_seats': total_seats_by_ride.get(ride.id, 0),
+                'passengers': passengers_by_ride.get(ride.id, []),
             }
             for ride in unassigned_rides
         ],
@@ -1427,18 +1529,13 @@ def admin_report_summary(request):
     # Get all departed assignments
     departed = RideAssignment.objects.filter(
         has_departed=True
-    ).select_related('driver', 'car', 'ride__origin', 'ride__destination')
-
-    # Pre-load travel times
-    tt_minutes = {}
-    for tt in TravelTime.objects.all():
-        tt_minutes[(tt.origin_id, tt.destination_id)] = tt.minutes
+    ).select_related('driver', 'car').prefetch_related('ride__route_stops__location')
 
     # Driver hours: sum travel time for each departed assignment
     driver_stats = defaultdict(lambda: {'name': '', 'email': '', 'total_minutes': 0, 'rides': 0})
     for a in departed:
         key = a.driver_id
-        minutes = tt_minutes.get((a.ride.origin_id, a.ride.destination_id), 0)
+        minutes = a.ride.total_travel_minutes
         driver_stats[key]['name'] = a.driver.name
         driver_stats[key]['email'] = a.driver.email
         driver_stats[key]['total_minutes'] += minutes
@@ -1594,7 +1691,7 @@ def admin_car_km_overview(request):
     assignments_qs = (
         RideAssignment.objects
         .filter(ride_id__in=non_empty_ride_ids)
-        .select_related('car', 'ride', 'ride__origin', 'ride__destination')
+        .select_related('car', 'ride').prefetch_related('ride__route_stops__location')
         .order_by('car_id', 'ride__departure_time')
     )
 
@@ -1602,11 +1699,6 @@ def admin_car_km_overview(request):
     assignments_by_car = defaultdict(list)
     for a in assignments_qs:
         assignments_by_car[a.car_id].append(a)
-
-    # Pre-load travel times for minute lookups
-    tt_minutes = {}
-    for tt in TravelTime.objects.all():
-        tt_minutes[(tt.origin_id, tt.destination_id)] = tt.minutes
 
     distance_cache = {}
 
@@ -1657,15 +1749,16 @@ def admin_car_km_overview(request):
                     else:
                         total_meters += d
 
-            # Add ride distance
-            d_ride = _fetch_distance(origin, dest, api_key, distance_cache)
-            if d_ride is None:
-                missing = True
-            else:
-                total_meters += d_ride
+            route = [stop.location for stop in ride.ordered_stops]
+            for leg_origin, leg_destination in zip(route, route[1:]):
+                d_ride = _fetch_distance(leg_origin, leg_destination, api_key, distance_cache)
+                if d_ride is None:
+                    missing = True
+                else:
+                    total_meters += d_ride
 
             # Update tracking
-            tt_min = tt_minutes.get((origin.id, dest.id), 0)
+            tt_min = ride.total_travel_minutes
             prev_arrival_time = departure_time + timedelta(minutes=tt_min)
             current_pos = dest
 

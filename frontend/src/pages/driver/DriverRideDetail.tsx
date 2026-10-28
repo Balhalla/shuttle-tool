@@ -118,7 +118,13 @@ export function DriverRideDetail() {
 
   const confirmedPassengers = passengers.filter((p) => p.status === 'confirmed');
   const pendingPassengers = passengers.filter((p) => p.status === 'pending');
-  const presentCount = confirmedPassengers.filter((p) => p.is_present).length;
+  const confirmedSeatCount = confirmedPassengers.reduce(
+    (total, passenger) => total + passenger.seats,
+    0,
+  );
+  const presentCount = confirmedPassengers
+    .filter((passenger) => passenger.is_present)
+    .reduce((total, passenger) => total + passenger.seats, 0);
 
   // Find current driver's assignment
   const myAssignment = ride?.assignments?.find(a => a.driver.id === user?.id);
@@ -142,40 +148,19 @@ export function DriverRideDetail() {
       </button>
 
       <div className="ride-header">
-        <h1>
+        <h1>{ride.stops.map((stop, index) => <span key={stop.position}>
+          {index > 0 && ' → '}
           <a
-            href={
-              ride.origin.latitude && ride.origin.longitude
-                ? `https://www.google.com/maps/dir/?api=1&destination=${ride.origin.latitude},${ride.origin.longitude}`
-                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ride.origin.name)}`
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            className="location-nav-link"
-          >
-            {ride.origin.name}
-          </a>
-          {' '}&rarr;{' '}
-          <a
-            href={
-              ride.destination.latitude && ride.destination.longitude
-                ? `https://www.google.com/maps/dir/?api=1&destination=${ride.destination.latitude},${ride.destination.longitude}`
-                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ride.destination.name)}`
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            className="location-nav-link"
-          >
-            {ride.destination.name}
-          </a>
-        </h1>
-        {(ride.origin.description || ride.destination.description) && (
-          <p className="location-descriptions">
-            {ride.origin.description && <span>{ride.origin.name}: {ride.origin.description}</span>}
-            {ride.origin.description && ride.destination.description && <br />}
-            {ride.destination.description && <span>{ride.destination.name}: {ride.destination.description}</span>}
-          </p>
-        )}
+            href={stop.location.latitude && stop.location.longitude
+              ? `https://www.google.com/maps/dir/?api=1&destination=${stop.location.latitude},${stop.location.longitude}`
+              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.location.name)}`}
+            target="_blank" rel="noopener noreferrer" className="location-nav-link"
+          >{stop.location.name}</a>
+          {stop.estimated_time && <small> ({new Date(stop.estimated_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })})</small>}
+        </span>)}</h1>
+        {ride.stops.some((stop) => stop.location.description) && <p className="location-descriptions">
+          {ride.stops.filter((stop) => stop.location.description).map((stop) => <span key={stop.position}>{stop.location.name}: {stop.location.description}<br /></span>)}
+        </p>}
         <p className="departure-time">{formatTime(ride.departure_time)}</p>
         {ride.is_vip && <span className="vip-badge">VIP Ride</span>}
         {hasDeparted && <span className="departed-badge">Departed</span>}
@@ -243,7 +228,7 @@ export function DriverRideDetail() {
 
       <div className="passengers-section">
         <h2>
-          Passenger List ({confirmedPassengers.length})
+          Passenger List ({confirmedSeatCount} seats)
           {confirmedPassengers.length > 0 && (
             <span className="present-count"> - {presentCount} present</span>
           )}
@@ -256,6 +241,7 @@ export function DriverRideDetail() {
               <tr>
                 <th>#</th>
                 <th>Name</th>
+                <th>Seats</th>
                 <th>Phone</th>
                 <th>Present</th>
               </tr>
@@ -266,7 +252,8 @@ export function DriverRideDetail() {
                 return (
                   <tr key={passenger.id} className={passenger.is_present ? 'present' : ''}>
                     <td>{index + 1}</td>
-                    <td>{passenger.name}</td>
+                    <td>{passenger.name} <small>({ride.stops[passenger.pickup_position]?.location.short_name} → {ride.stops[passenger.dropoff_position]?.location.short_name})</small></td>
+                    <td>{passenger.seats}</td>
                     <td><PhoneLink phone={passenger.phone} className="phone-link" /></td>
                     <td>
                       <button
@@ -309,7 +296,7 @@ export function DriverRideDetail() {
                 {pendingPassengers.map((passenger, index) => (
                   <tr key={passenger.id} style={{ opacity: 0.6 }}>
                     <td>{index + 1}</td>
-                    <td>{passenger.name}</td>
+                    <td>{passenger.name} <small>({ride.stops[passenger.pickup_position]?.location.short_name} → {ride.stops[passenger.dropoff_position]?.location.short_name})</small></td>
                     <td><PhoneLink phone={passenger.phone} className="phone-link" /></td>
                     <td><span style={{ color: '#856404', fontSize: '0.85rem' }}>Pending</span></td>
                   </tr>

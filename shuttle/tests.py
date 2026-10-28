@@ -499,6 +499,14 @@ class RideAssignmentTimelineTestCase(TestCase):
         )
         self.assertEqual(response.data['unassigned_rides'][0]['origin'], 'FEST')
         self.assertEqual(response.data['unassigned_rides'][0]['destination'], 'CAMP')
+        self.assertEqual(
+            response.data['unassigned_rides'][0]['origin_name'],
+            'Festival Grounds',
+        )
+        self.assertEqual(
+            response.data['unassigned_rides'][0]['destination_name'],
+            'Camping North',
+        )
 
     @patch('shuttle.views.timezone.localtime')
     def test_timeline_includes_reserved_and_total_ride_places(self, mock_localtime):
@@ -526,6 +534,14 @@ class RideAssignmentTimelineTestCase(TestCase):
         )
         self.assertEqual(assignment['reserved_seats'], 1)
         self.assertEqual(assignment['total_seats'], self.car_one.capacity)
+        self.assertEqual(
+            assignment['passengers'],
+            [{
+                'name': 'Confirmed Passenger',
+                'seats': 1,
+                'status': 'confirmed',
+            }],
+        )
 
 
 class LocationShortNameTestCase(TestCase):
@@ -557,3 +573,147 @@ class LocationShortNameTestCase(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('short_name', response.data)
+
+
+class VipPassengerTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            email='vip-admin@example.com',
+            name='VIP Admin',
+            role='admin',
+        )
+        self.client.force_authenticate(user=self.admin)
+        self.vip = User.objects.create_user(
+            email='vip@example.com',
+            name='VIP Passenger',
+            phone='+32 470 20 00 01',
+            role='vip',
+        )
+        self.origin = Location.objects.create(
+            name='Festival Grounds',
+            short_name='FEST',
+        )
+        self.destination = Location.objects.create(
+            name='Camping North',
+            short_name='CAMP',
+        )
+        self.ride = Ride.objects.create(
+            origin=self.origin,
+            destination=self.destination,
+            departure_time='2027-02-27T22:00:00+01:00',
+        )
+
+    def test_admin_can_create_vip_user_and_filter_vip_users(self):
+        response = self.client.post(
+            '/api/admin/users/',
+            {
+                'email': 'second-vip@example.com',
+                'name': 'Second VIP',
+                'role': 'vip',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.get('/api/admin/users/', {'role': 'vip'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            {user['email'] for user in response.data},
+            {'vip@example.com', 'second-vip@example.com'},
+        )
+
+    def test_admin_can_quick_add_vip_user_to_ride(self):
+        response = self.client.post(
+            f'/api/admin/rides/{self.ride.id}/add_passenger/',
+            {
+                'name': self.vip.name,
+                'email': self.vip.email,
+                'phone': self.vip.phone,
+                'user_id': self.vip.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        reservation = Reservation.objects.get(id=response.data['id'])
+        self.assertEqual(reservation.user, self.vip)
+        self.assertEqual(reservation.status, 'confirmed')
+
+
+class ReservationSeatQuantityTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='seat-booking@example.com',
+            name='Seat Booking',
+            phone='+32 470 40 00 01',
+            role='public',
+        )
+        self.client.force_authenticate(user=self.user)
+        self.origin = Location.objects.create(
+            name='Festival Grounds',
+            short_name='FEST',
+        )
+        self.destination = Location.objects.create(
+            name='Camping North',
+            short_name='CAMP',
+        )
+        self.car = Car.objects.create(name='Seat Test Car', capacity=4)
+        self.driver = User.objects.create_user(
+            email='seat-test-driver@example.com',
+            name='Seat Test Driver',
+            role='driver',
+            default_car=self.car,
+        )
+        self.ride = Ride.objects.create(
+            origin=self.origin,
+            destination=self.destination,
+            departure_time='2030-02-27T22:00:00+01:00',
+        )
+        RideAssignment.objects.create(
+            ride=self.ride,
+            driver=self.driver,
+            car=self.car,
+        )
+
+    def test_authenticated_user_can_reserve_multiple_seats(self):
+        response = self.client.post(
+            f'/api/rides/{self.ride.id}/reserve/',
+            {
+                'email': self.user.email,
+                'name': self.user.name,
+                'phone': self.user.phone,
+                'seats': 3,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        reservation = Reservation.objects.get(id=response.data['reservation']['id'])
+        self.assertEqual(reservation.seats, 3)
+        self.assertEqual(self.ride.reserved_seats, 3)
+
+    def test_reservation_rejected_when_requested_seats_exceed_capacity(self):
+        Reservation.objects.create(
+            ride=self.ride,
+            guest_name='Existing Passenger',
+            guest_email='existing@example.com',
+            seats=3,
+            status='confirmed',
+        )
+
+        response = self.client.post(
+            f'/api/rides/{self.ride.id}/reserve/',
+            {
+                'email': self.user.email,
+                'name': self.user.name,
+                'phone': self.user.phone,
+                'seats': 2,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Only 1 seat remaining', response.data['error'])

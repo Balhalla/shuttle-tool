@@ -85,7 +85,7 @@ export function AdminReservations() {
       <td>
         <Link to={`/admin/rides/${res.ride.id}/passengers`} className="ride-link">
           <div>
-            {res.ride.origin.name} &rarr; {res.ride.destination.name}
+            {res.ride.stops[res.pickup_position]?.location.name ?? res.ride.origin.name} &rarr; {res.ride.stops[res.dropoff_position]?.location.name ?? res.ride.destination.name}
           </div>
           <small>{formatTime(res.ride.departure_time)}</small>
         </Link>

@@ -88,10 +88,13 @@ export function Confirm() {
         <div className="reservation-details">
           <h2>Ride Details</h2>
           <p>
-            <strong>From:</strong> {reservation.ride.origin.name}
+            <strong>Seats:</strong> {reservation.seats}
           </p>
           <p>
-            <strong>To:</strong> {reservation.ride.destination.name}
+            <strong>From:</strong> {reservation.ride.stops[reservation.pickup_position]?.location.name ?? reservation.ride.origin.name}
+          </p>
+          <p>
+            <strong>To:</strong> {reservation.ride.stops[reservation.dropoff_position]?.location.name ?? reservation.ride.destination.name}
           </p>
           <p>
             <strong>Departure:</strong> {formatTime(reservation.ride.departure_time)}

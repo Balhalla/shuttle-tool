@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type {
   DriverTimeline,
   FestivalProgramItem,
+  TimelineRidePassenger,
   TimelineUnassignedRide,
 } from '../../types';
 
@@ -33,6 +34,22 @@ type TimelineBlockLayout = {
   columnCount: number;
 };
 
+type RideHoverDetails = {
+  departureTime: string;
+  origin: string;
+  destination: string;
+  originName: string;
+  destinationName: string;
+  routeLabel: string;
+  reservedSeats: number;
+  totalSeats: number;
+  isVip: boolean;
+  drivers: Array<{ name: string; carName: string }>;
+  passengers: TimelineRidePassenger[];
+  overlapsBlockedPeriod: boolean;
+  overlapsAnotherRide: boolean;
+};
+
 const TIME_AXIS_WIDTH = 52;
 const PROGRAM_TRACK_WIDTH = 180;
 const UNASSIGNED_TRACK_WIDTH = 140;
@@ -41,7 +58,6 @@ const PROGRAM_CLICK_INCREMENT_MS = 15 * 60 * 1000;
 const PROGRAM_DRAG_TYPE = 'application/x-shuttle-program-item';
 const RIDE_ASSIGNMENT_DRAG_TYPE = 'application/x-shuttle-ride-assignment';
 const UNASSIGNED_RIDE_DRAG_TYPE = 'application/x-shuttle-unassigned-ride';
-const ASSIGNMENT_VISUAL_DURATION_MS = 52 * 60 * 1000;
 
 function TimelineNotifications({
   error,
@@ -127,11 +143,11 @@ function getAssignmentOverlapInfo(
   assignment: TimelineAssignment,
 ) {
   const startMs = new Date(assignment.departure_time).getTime();
-  const endMs = startMs + ASSIGNMENT_VISUAL_DURATION_MS;
+  const endMs = new Date(assignment.estimated_end_time).getTime();
   const overlapsRide = driverTimeline.assignments.some((otherAssignment) => {
     if (otherAssignment.id === assignment.id) return false;
     const otherStartMs = new Date(otherAssignment.departure_time).getTime();
-    const otherEndMs = otherStartMs + ASSIGNMENT_VISUAL_DURATION_MS;
+    const otherEndMs = new Date(otherAssignment.estimated_end_time).getTime();
     return startMs < otherEndMs && endMs > otherStartMs;
   });
   const overlapsBlockedPeriod = driverTimeline.blocked_periods.some(
@@ -285,7 +301,6 @@ export function AdminDriverTimeline() {
     start_time: '',
     end_time: '',
   });
-  const [dayChangeTime, setDayChangeTime] = useState('06:00');
   const [timelineRange, setTimelineRange] = useState<{
     start: string;
     end: string;
@@ -301,14 +316,14 @@ export function AdminDriverTimeline() {
   const [savingRideDriverId, setSavingRideDriverId] = useState<number | null>(null);
   const [savingUnassignment, setSavingUnassignment] = useState(false);
   const [hoveredRideId, setHoveredRideId] = useState<number | null>(null);
+  const [rideInfoPosition, setRideInfoPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      api.adminGetSiteSettings(),
-      api.adminGetDriverTimeline(),
-    ])
-      .then(([settings, timeline]) => {
-        setDayChangeTime(settings.day_change_time || '06:00');
+    api.adminGetDriverTimeline()
+      .then((timeline) => {
         setTimelineRange(timeline.range);
         setData(timeline.drivers);
         setProgramItems(timeline.program_items || []);
@@ -339,6 +354,27 @@ export function AdminDriverTimeline() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const hideRideInfo = () => {
+    setHoveredRideId(null);
+    setRideInfoPosition(null);
+  };
+
+  const showRideInfo = (rideId: number, anchor: HTMLElement) => {
+    const bounds = anchor.getBoundingClientRect();
+    const cardWidth = 280;
+    const cardHeight = 360;
+    const gap = 10;
+    const left = bounds.right + gap + cardWidth <= window.innerWidth - 12
+      ? bounds.right + gap
+      : Math.max(12, bounds.left - cardWidth - gap);
+    const top = Math.max(
+      12,
+      Math.min(bounds.top, window.innerHeight - cardHeight - 12),
+    );
+    setHoveredRideId(rideId);
+    setRideInfoPosition({ top, left });
   };
 
   const draggedProgramItem = programItems.find(
@@ -387,7 +423,7 @@ export function AdminDriverTimeline() {
     setDraggedRideAssignment(null);
     setDragOverDriverId(null);
     setUnassignedDropActive(false);
-    setHoveredRideId(null);
+    hideRideInfo();
   };
 
   const handleUnassignedRideDragStart = (
@@ -407,7 +443,7 @@ export function AdminDriverTimeline() {
     setDraggedUnassignedRide(null);
     setDragOverDriverId(null);
     setUnassignedDropActive(false);
-    setHoveredRideId(null);
+    hideRideInfo();
   };
 
   const handleDriverDragOver = (
@@ -496,7 +532,7 @@ export function AdminDriverTimeline() {
     event: React.DragEvent<HTMLDivElement>,
     driverId: number,
   ) => {
-    setHoveredRideId(null);
+    hideRideInfo();
     const plainText = event.dataTransfer.getData('text/plain');
     const rawAssignment = event.dataTransfer.getData(RIDE_ASSIGNMENT_DRAG_TYPE)
       || (plainText.startsWith('ride:') ? plainText.slice(5) : '');
@@ -545,7 +581,7 @@ export function AdminDriverTimeline() {
     } finally {
       setSavingRideDriverId(null);
       setDraggedRideAssignment(null);
-      setHoveredRideId(null);
+      hideRideInfo();
     }
   };
 
@@ -649,7 +685,7 @@ export function AdminDriverTimeline() {
     } finally {
       setSavingUnassignment(false);
       setDraggedRideAssignment(null);
-      setHoveredRideId(null);
+      hideRideInfo();
     }
   };
 
@@ -717,7 +753,7 @@ export function AdminDriverTimeline() {
       return {
         key: `unassigned-${ride.id}`,
         start: rideStart,
-        end: rideStart + ASSIGNMENT_VISUAL_DURATION_MS,
+        end: new Date(ride.estimated_end_time).getTime(),
       };
     }),
   );
@@ -730,7 +766,7 @@ export function AdminDriverTimeline() {
           return {
             key: `assignment-${assignment.id}`,
             start: assignmentStart,
-            end: assignmentStart + ASSIGNMENT_VISUAL_DURATION_MS,
+            end: new Date(assignment.estimated_end_time).getTime(),
           };
         }),
       ]),
@@ -760,20 +796,71 @@ export function AdminDriverTimeline() {
     });
   };
 
-  const formatFestivalDate = (date: Date) => {
-    return date.toLocaleDateString('en-GB', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const firstVisibleDate = timelineRange ? new Date(timelineRange.start) : null;
-  const lastVisibleDate = timelineRange ? new Date(timelineRange.end) : null;
-  if (lastVisibleDate) {
-    lastVisibleDate.setDate(lastVisibleDate.getDate() - 1);
+  const rideDetailsById = new Map<number, RideHoverDetails>();
+  for (const driverTimeline of data) {
+    for (const assignment of driverTimeline.assignments) {
+      const details: RideHoverDetails = rideDetailsById.get(assignment.ride_id) ?? {
+        departureTime: assignment.departure_time,
+        origin: assignment.origin,
+        destination: assignment.destination,
+        originName: assignment.origin_name,
+        destinationName: assignment.destination_name,
+        routeLabel: assignment.route_label,
+        reservedSeats: assignment.reserved_seats,
+        totalSeats: assignment.total_seats,
+        isVip: assignment.is_vip,
+        drivers: [],
+        passengers: assignment.passengers,
+        overlapsBlockedPeriod: false,
+        overlapsAnotherRide: false,
+      };
+      details.drivers.push({
+        name: driverTimeline.driver.name,
+        carName: assignment.car_name,
+      });
+      details.overlapsBlockedPeriod = (
+        details.overlapsBlockedPeriod
+        || getAssignmentOverlapInfo(driverTimeline, assignment).overlapsBlockedPeriod
+      );
+      details.overlapsAnotherRide = (
+        details.overlapsAnotherRide
+        || getAssignmentOverlapInfo(driverTimeline, assignment).label.includes('another ride')
+      );
+      rideDetailsById.set(assignment.ride_id, details);
+    }
   }
+  for (const ride of unassignedRides) {
+    rideDetailsById.set(ride.id, {
+      departureTime: ride.departure_time,
+      origin: ride.origin,
+      destination: ride.destination,
+      originName: ride.origin_name,
+      destinationName: ride.destination_name,
+      routeLabel: ride.route_label,
+      reservedSeats: ride.reserved_seats,
+      totalSeats: ride.total_seats,
+      isVip: ride.is_vip,
+      drivers: [],
+      passengers: ride.passengers,
+      overlapsBlockedPeriod: false,
+      overlapsAnotherRide: false,
+    });
+  }
+  const hoveredRideDetails = hoveredRideId === null
+    ? null
+    : rideDetailsById.get(hoveredRideId);
+  const hoveredRideStatus = !hoveredRideDetails
+    ? ''
+    : hoveredRideDetails.totalSeats === 0
+      ? 'No driver assigned'
+      : hoveredRideDetails.reservedSeats > hoveredRideDetails.totalSeats
+        ? 'Over capacity'
+        : hoveredRideDetails.reservedSeats === hoveredRideDetails.totalSeats
+          ? 'Full'
+          : 'Available';
+  const hoveredPassengers = hoveredRideDetails?.passengers ?? [];
+  const visibleHoveredPassengers = hoveredPassengers.slice(0, 8);
+  const remainingHoveredPassengers = hoveredPassengers.length - visibleHoveredPassengers.length;
 
   // Generate time markers
   const markers: Date[] = [];
@@ -934,29 +1021,100 @@ export function AdminDriverTimeline() {
         onDismissError={() => setError('')}
         onDismissNotice={() => setNotice('')}
       />
+      {rideInfoPosition && hoveredRideDetails && (
+        <div
+          className="timeline-ride-info"
+          style={{ top: rideInfoPosition.top, left: rideInfoPosition.left }}
+          role="tooltip"
+        >
+          <div className="timeline-ride-info-header">
+            <strong>
+              {hoveredRideDetails.routeLabel}
+            </strong>
+            {hoveredRideDetails.isVip && (
+              <span className="timeline-ride-info-vip">VIP</span>
+            )}
+          </div>
+          <div className="timeline-ride-info-time">
+            {formatHour(new Date(hoveredRideDetails.departureTime))}
+          </div>
+          <div className="timeline-ride-info-row">
+            <span>Capacity</span>
+            <strong>
+              {hoveredRideDetails.reservedSeats}/{hoveredRideDetails.totalSeats}
+            </strong>
+          </div>
+          <div className="timeline-ride-info-row">
+            <span>Status</span>
+            <strong
+              className={
+                hoveredRideStatus === 'Over capacity'
+                  ? 'warning'
+                  : hoveredRideStatus === 'Full'
+                    ? 'full'
+                    : ''
+              }
+            >
+              {hoveredRideStatus}
+            </strong>
+          </div>
+          <div className="timeline-ride-info-drivers">
+            <span>{hoveredRideDetails.drivers.length > 0 ? 'Drivers' : 'Assignment'}</span>
+            {hoveredRideDetails.drivers.length > 0 ? (
+              <ul>
+                {hoveredRideDetails.drivers.map((driver) => (
+                  <li key={`${driver.name}-${driver.carName}`}>
+                    {driver.name} · {driver.carName}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <strong>No driver assigned</strong>
+            )}
+          </div>
+          <div className="timeline-ride-info-passengers">
+            <span>Passengers ({hoveredPassengers.length})</span>
+            {visibleHoveredPassengers.length > 0 ? (
+              <ul>
+                {visibleHoveredPassengers.map((passenger, index) => (
+                  <li key={`${passenger.name}-${passenger.status}-${index}`}>
+                    <span>{passenger.name}{passenger.pickup && passenger.dropoff ? ` · ${passenger.pickup} → ${passenger.dropoff}` : ''}</span>
+                    <span>
+                      {passenger.seats} {passenger.seats === 1 ? 'seat' : 'seats'}
+                      {passenger.status === 'pending' ? ' · pending' : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <strong>No passengers</strong>
+            )}
+            {remainingHoveredPassengers > 0 && (
+              <small>+{remainingHoveredPassengers} more passengers</small>
+            )}
+          </div>
+          {hoveredRideDetails.overlapsBlockedPeriod && (
+            <div className="timeline-ride-info-warning">
+              Overlaps a blocked period
+            </div>
+          )}
+          {hoveredRideDetails.overlapsAnotherRide && (
+            <div className="timeline-ride-info-warning">
+              Overlaps another ride for the same driver
+            </div>
+          )}
+          <div className="timeline-ride-info-hint">
+            {hoveredRideDetails.drivers.length > 0
+              ? 'Drag to move · Ctrl-drag to add a driver'
+              : 'Drag to a driver to assign this ride'}
+          </div>
+        </div>
+      )}
       <div className="page-header">
         <h1>Driver &amp; Festival Timeline</h1>
         <button type="button" className="btn btn-primary" onClick={() => openCreateProgramForm()}>
           Add Program Item
         </button>
-      </div>
-
-      <div className="timeline-controls">
-        <div className="timeline-festival-summary">
-          <strong>Remaining festival dates</strong>
-          <span>
-            {firstVisibleDate && lastVisibleDate
-              ? `${formatFestivalDate(firstVisibleDate)} – ${formatFestivalDate(lastVisibleDate)} (${remainingDayCount} ${remainingDayCount === 1 ? 'day' : 'days'})`
-              : 'No upcoming dates'}
-          </span>
-        </div>
-        <small className="timeline-day-boundary">
-          Each festival day runs from {dayChangeTime} until {dayChangeTime} the following day.
-        </small>
-        <small className="timeline-program-hint">
-          Drag rides between drivers and Unassigned. Ctrl-drag a ride to add a
-          driver. Drag program items to block a driver.
-        </small>
       </div>
 
       {showProgramForm && (
@@ -1068,6 +1226,7 @@ export function AdminDriverTimeline() {
         <div
           className="timeline-body-scroll"
           onScroll={(event) => {
+            hideRideInfo();
             if (headerScrollRef.current) {
               headerScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
             }
@@ -1199,8 +1358,12 @@ export function AdminDriverTimeline() {
                       width: `calc(${rideWidth}% - 4px)`,
                       right: 'auto',
                     }}
-                    title={`${formatHour(departure)} · ${ride.origin} → ${ride.destination} · No driver assigned · ${ride.reserved_seats}/${ride.total_seats} places reserved${capacityLabel ? `\n⚠ ${capacityLabel}` : ''}`}
+                    aria-label={`${ride.route_label}, ${formatHour(departure)}`}
                     onClick={() => navigate(`/admin/rides/${ride.id}/passengers`)}
+                    onMouseEnter={(event) => showRideInfo(ride.id, event.currentTarget)}
+                    onMouseLeave={hideRideInfo}
+                    onFocus={(event) => showRideInfo(ride.id, event.currentTarget)}
+                    onBlur={hideRideInfo}
                     onDragStart={(event) => handleUnassignedRideDragStart(event, ride)}
                     onDragEnd={handleUnassignedRideDragEnd}
                   >
@@ -1222,7 +1385,7 @@ export function AdminDriverTimeline() {
                       </span>
                     </span>
                     <span className="timeline-assignment-route">
-                      {ride.origin} → {ride.destination}
+                      {ride.route_label}
                     </span>
                     <span className="timeline-assignment-meta">No driver assigned</span>
                   </button>
@@ -1365,12 +1528,12 @@ export function AdminDriverTimeline() {
                         width: `calc(${assignmentWidth}% - ${4 + blockedIndentPx}px)`,
                         right: 'auto',
                       }}
-                      title={`${formatHour(departure)} · ${assign.origin} → ${assign.destination} · ${assign.car_name} · ${assign.reserved_seats}/${assign.total_seats} places reserved${assign.is_vip ? ' · VIP' : ''}${warningLabel ? `\n⚠ ${warningLabel}` : ''}${assign.has_departed ? '' : '\nDrag to move · Ctrl-drag to add another driver'}`}
+                      aria-label={`${assign.route_label}, ${formatHour(departure)}`}
                       onClick={() => navigate(`/admin/rides/${assign.ride_id}/passengers`)}
-                      onMouseEnter={() => setHoveredRideId(assign.ride_id)}
-                      onMouseLeave={() => setHoveredRideId(null)}
-                      onFocus={() => setHoveredRideId(assign.ride_id)}
-                      onBlur={() => setHoveredRideId(null)}
+                      onMouseEnter={(event) => showRideInfo(assign.ride_id, event.currentTarget)}
+                      onMouseLeave={hideRideInfo}
+                      onFocus={(event) => showRideInfo(assign.ride_id, event.currentTarget)}
+                      onBlur={hideRideInfo}
                       onDragStart={(event) => handleAssignmentDragStart(
                         event,
                         assign,
@@ -1394,7 +1557,7 @@ export function AdminDriverTimeline() {
                         </span>
                       </span>
                       <span className="timeline-assignment-route">
-                        {assign.origin} → {assign.destination}
+                        {assign.route_label}
                       </span>
                       <span className="timeline-assignment-meta">
                         {assign.car_name}

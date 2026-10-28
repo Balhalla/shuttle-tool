@@ -12,6 +12,10 @@ export function AdminRides() {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [stopIds, setStopIds] = useState<number[]>([]);
+  const [nextStopId, setNextStopId] = useState('');
+  const [draggedStopIndex, setDraggedStopIndex] = useState<number | null>(null);
+  const [dropTargetStopIndex, setDropTargetStopIndex] = useState<number | null>(null);
   const [form, setForm] = useState({
     origin_id: '',
     destination_id: '',
@@ -26,6 +30,7 @@ export function AdminRides() {
     departureTime: Date;
     originId: number;
     destinationId: number;
+    stopIds: number[];
     assignments: RideAssignment[];
   } | null>(null);
   const [newAssignment, setNewAssignment] = useState({ driver_id: '', car_id: '' });
@@ -75,8 +80,7 @@ export function AdminRides() {
     setError('');
 
     const data = {
-      origin_id: parseInt(form.origin_id),
-      destination_id: parseInt(form.destination_id),
+      stop_ids: stopIds,
       departure_time: form.departure_time,
       is_vip: form.is_vip,
     };
@@ -110,6 +114,7 @@ export function AdminRides() {
       departure_time: localDt,
       is_vip: ride.is_vip,
     });
+    setStopIds(ride.stops.map((stop) => stop.location.id));
     setEditingId(ride.id);
     setShowForm(true);
   };
@@ -133,7 +138,36 @@ export function AdminRides() {
       is_vip: false,
     });
     setEditingId(null);
+    setStopIds([]);
+    setNextStopId('');
+    setDraggedStopIndex(null);
+    setDropTargetStopIndex(null);
     setShowForm(false);
+  };
+
+  const reorderStops = (targetIndex: number) => {
+    if (draggedStopIndex === null || draggedStopIndex === targetIndex) return;
+    const isLoop = stopIds.length > 2 && stopIds[0] === stopIds[stopIds.length - 1];
+    if (isLoop && (draggedStopIndex === stopIds.length - 1 || targetIndex === stopIds.length - 1)) return;
+
+    const ordered = isLoop ? stopIds.slice(0, -1) : [...stopIds];
+    const [movedStop] = ordered.splice(draggedStopIndex, 1);
+    if (movedStop === undefined) return;
+    ordered.splice(targetIndex, 0, movedStop);
+    setStopIds(isLoop ? [...ordered, ordered[0]] : ordered);
+    setDraggedStopIndex(null);
+    setDropTargetStopIndex(null);
+  };
+
+  const removeStop = (index: number) => {
+    const isLoop = stopIds.length > 2 && stopIds[0] === stopIds[stopIds.length - 1];
+    if (isLoop && index < stopIds.length - 1) {
+      const ordered = stopIds.slice(0, -1);
+      ordered.splice(index, 1);
+      setStopIds(ordered.length > 1 ? [...ordered, ordered[0]] : ordered);
+      return;
+    }
+    setStopIds(stopIds.filter((_, stopIndex) => stopIndex !== index));
   };
 
   const handleCsvImport = async () => {
@@ -174,10 +208,11 @@ export function AdminRides() {
   const openAssignmentModal = (ride: Ride) => {
     setAssignmentModal({
       rideId: ride.id,
-      rideName: `${ride.origin.name} → ${ride.destination.name}`,
+      rideName: ride.stops.map((stop) => stop.location.name).join(' → '),
       departureTime: new Date(ride.departure_time),
       originId: ride.origin.id,
       destinationId: ride.destination.id,
+      stopIds: ride.stops.map((stop) => stop.location.id),
       assignments: ride.assignments || [],
     });
     setNewAssignment({ driver_id: '', car_id: '' });
@@ -216,14 +251,15 @@ export function AdminRides() {
     return tt ? tt.minutes : null;
   };
 
-  // Returns true if a driver departing firstOrigin→firstDest at firstTime
-  // cannot reach secondOrigin in time for secondTime.
+  // Returns true if a driver can finish this route and reach the next start in time.
   const ridesConflict = (
-    firstTime: number, firstOriginId: number, firstDestId: number,
+    firstTime: number, firstStopIds: number[],
     secondTime: number, secondOriginId: number,
   ): boolean => {
-    const rideDuration = getTravelTime(firstOriginId, firstDestId);
-    if (rideDuration === null) return false;
+    const legTimes = firstStopIds.slice(0, -1).map((stopId, index) => getTravelTime(stopId, firstStopIds[index + 1]));
+    if (legTimes.some((minutes) => minutes === null)) return false;
+    const rideDuration = (legTimes as number[]).reduce((total, minutes) => total + minutes, 0);
+    const firstDestId = firstStopIds[firstStopIds.length - 1];
     const travelToNext = getTravelTime(firstDestId, secondOriginId);
     const repositioning = travelToNext !== null ? travelToNext * 60 * 1000 : 0;
     return firstTime + rideDuration * 60 * 1000 + repositioning > secondTime;
@@ -245,10 +281,10 @@ export function AdminRides() {
       const otherTime = new Date(otherRide.departure_time).getTime();
 
       if (otherTime < rideTime) {
-        if (ridesConflict(otherTime, otherRide.origin.id, otherRide.destination.id, rideTime, rideToCheck.origin.id))
+        if (ridesConflict(otherTime, otherRide.stops.map((stop) => stop.location.id), rideTime, rideToCheck.origin.id))
           return true;
       } else {
-        if (ridesConflict(rideTime, rideToCheck.origin.id, rideToCheck.destination.id, otherTime, otherRide.origin.id))
+        if (ridesConflict(rideTime, rideToCheck.stops.map((stop) => stop.location.id), otherTime, otherRide.origin.id))
           return true;
       }
     }
@@ -266,7 +302,7 @@ export function AdminRides() {
   };
 
   // Check if adding a driver to a ride would cause a conflict
-  const wouldDriverConflict = (driverId: number, targetRide: { departureTime: Date; originId: number; destinationId: number }): boolean => {
+  const wouldDriverConflict = (driverId: number, targetRide: { departureTime: Date; originId: number; destinationId: number; stopIds: number[] }): boolean => {
     const driverRides = rides.filter((r) =>
       r.assignments?.some((a) => a.driver.id === driverId)
     );
@@ -279,10 +315,10 @@ export function AdminRides() {
       const otherTime = new Date(otherRide.departure_time).getTime();
 
       if (otherTime < rideTime) {
-        if (ridesConflict(otherTime, otherRide.origin.id, otherRide.destination.id, rideTime, targetRide.originId))
+        if (ridesConflict(otherTime, otherRide.stops.map((stop) => stop.location.id), rideTime, targetRide.originId))
           return true;
       } else {
-        if (ridesConflict(rideTime, targetRide.originId, targetRide.destinationId, otherTime, otherRide.origin.id))
+        if (ridesConflict(rideTime, targetRide.stopIds, otherTime, otherRide.origin.id))
           return true;
       }
     }
@@ -392,6 +428,34 @@ export function AdminRides() {
     return '';
   };
 
+  const getStopPlanIssues = (ids: number[]) => {
+    const issues: string[] = [];
+    if (ids.length < 2) {
+      issues.push('Add at least two stops.');
+      return issues;
+    }
+
+    const isLoop = ids.length > 2 && ids[0] === ids[ids.length - 1];
+    const uniqueRoute = isLoop ? ids.slice(0, -1) : ids;
+    if (new Set(uniqueRoute).size !== uniqueRoute.length) {
+      issues.push('A location may appear only once, except the starting location as the final return stop.');
+    }
+
+    for (let index = 0; index < ids.length - 1; index += 1) {
+      const fromId = ids[index];
+      const toId = ids[index + 1];
+      const configured = travelTimes.some((travelTime) => travelTime.origin.id === fromId && travelTime.destination.id === toId);
+      if (!configured) {
+        const fromName = locations.find((location) => location.id === fromId)?.name ?? `Location ${fromId}`;
+        const toName = locations.find((location) => location.id === toId)?.name ?? `Location ${toId}`;
+        issues.push(`Missing travel time from ${fromName} to ${toName}.`);
+      }
+    }
+    return issues;
+  };
+
+  const currentStopPlanIssues = getStopPlanIssues(stopIds);
+
   const now = new Date();
   const cutoffTime = new Date(now.getTime() - 30 * 60 * 1000); // 30 minutes ago
   const upcomingRides = rides.filter((ride) => new Date(ride.departure_time) >= cutoffTime);
@@ -405,7 +469,13 @@ export function AdminRides() {
   const renderRideRow = (ride: Ride) => (
     <tr key={ride.id} className={getRowClass(ride)}>
       <td>
-        {ride.origin.name} &rarr; {ride.destination.name}
+        {ride.stops.map((stop, index) => <span key={stop.position}>{index > 0 && ' → '}{stop.location.name}</span>)}
+        {getStopPlanIssues(ride.stops.map((stop) => stop.location.id)).length > 0 && (
+          <span
+            className="ride-stop-plan-badge invalid"
+            title={getStopPlanIssues(ride.stops.map((stop) => stop.location.id)).join(' ')}
+          >Invalid plan</span>
+        )}
       </td>
       <td>{formatTime(ride.departure_time)}</td>
       <td>{getDriverNames(ride)}</td>
@@ -442,7 +512,7 @@ export function AdminRides() {
           <button onClick={() => setShowCsvImport(true)} className="btn btn-secondary" style={{ marginRight: '0.5rem' }}>
             Import CSV
           </button>
-          <button onClick={() => setShowForm(true)} className="btn btn-primary">
+          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn btn-primary">
             Add Ride
           </button>
         </div>
@@ -533,36 +603,66 @@ export function AdminRides() {
             <h2>{editingId ? 'Edit Ride' : 'Add Ride'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="origin">Origin</label>
-                <select
-                  id="origin"
-                  value={form.origin_id}
-                  onChange={(e) => setForm({ ...form, origin_id: e.target.value })}
-                  required
-                >
-                  <option value="">Select origin</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="destination">Destination</label>
-                <select
-                  id="destination"
-                  value={form.destination_id}
-                  onChange={(e) => setForm({ ...form, destination_id: e.target.value })}
-                  required
-                >
-                  <option value="">Select destination</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
+                <label>Ordered stops (select the start again at the end for a loop)</label>
+                {currentStopPlanIssues.length > 0 && (
+                  <div className="ride-stop-plan-status invalid" role="alert">
+                    <strong>Invalid route plan</strong>
+                    <ul>{currentStopPlanIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                  </div>
+                )}
+                <ol className="ride-stop-order-list">
+                  {stopIds.map((id, index) => {
+                    const isLoop = stopIds.length > 2 && stopIds[0] === stopIds[stopIds.length - 1];
+                    const isReturnStop = isLoop && index === stopIds.length - 1;
+                    return <li
+                      key={`${index}-${id}`}
+                      draggable={!isReturnStop}
+                      className={dropTargetStopIndex === index ? 'ride-stop-drop-target' : undefined}
+                      onDragStart={(event) => {
+                        if (isReturnStop) return;
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', String(index));
+                        setDraggedStopIndex(index);
+                      }}
+                      onDragOver={(event) => {
+                        if (draggedStopIndex === null || isReturnStop) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        setDropTargetStopIndex(index);
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        reorderStops(index);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedStopIndex(null);
+                        setDropTargetStopIndex(null);
+                      }}
+                    >
+                      <span className="ride-stop-drag-handle" aria-hidden="true">⠿</span>
+                      <span className="ride-stop-name">{locations.find((loc) => loc.id === id)?.name ?? `Location ${id}`}{isReturnStop ? ' (return)' : ''}</span>
+                      <button
+                        type="button"
+                        className="ride-stop-remove"
+                        aria-label={`Remove ${isReturnStop ? 'return to ' : ''}${locations.find((loc) => loc.id === id)?.name ?? `location ${id}`}`}
+                        title="Remove stop"
+                        onClick={() => removeStop(index)}
+                      >×</button>
+                    </li>;
+                  })}
+                </ol>
+                {stopIds.length > 1 && <small>Drag stops to change their order. The return stop stays at the end of a loop.</small>}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select value={nextStopId} onChange={(e) => setNextStopId(e.target.value)}>
+                    <option value="">Select next stop</option>
+                    {locations.filter((loc) => !stopIds.includes(loc.id) || (stopIds.length >= 2 && loc.id === stopIds[0] && stopIds[stopIds.length - 1] !== stopIds[0])).map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                  </select>
+                  <button type="button" className="btn btn-secondary" disabled={!nextStopId} onClick={() => {
+                    setStopIds([...stopIds, Number(nextStopId)]);
+                    setNextStopId('');
+                  }}>Add stop</button>
+                </div>
+                {stopIds.length === 0 && <p>Start by adding the first stop.</p>}
               </div>
               <div className="form-group">
                 <label htmlFor="departure">Departure Time</label>
@@ -588,7 +688,7 @@ export function AdminRides() {
                 <button type="button" onClick={resetForm} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary" disabled={currentStopPlanIssues.length > 0}>
                   {editingId ? 'Update' : 'Create'}
                 </button>
               </div>
@@ -670,6 +770,7 @@ export function AdminRides() {
                         departureTime: assignmentModal.departureTime,
                         originId: assignmentModal.originId,
                         destinationId: assignmentModal.destinationId,
+                        stopIds: assignmentModal.stopIds,
                       };
                       return (
                         <>
@@ -820,7 +921,7 @@ export function AdminRides() {
               <tbody>
                 {trashRides.map((ride) => (
                   <tr key={ride.id} style={{ opacity: 0.6 }}>
-                    <td>{ride.origin.name} &rarr; {ride.destination.name}</td>
+      <td>{ride.stops.map((stop, index) => <span key={stop.position}>{index > 0 && ' → '}{stop.location.name}</span>)}</td>
                     <td>{formatTime(ride.departure_time)}</td>
                     <td>{getDriverNames(ride)}</td>
                     <td>{ride.reserved_seats}/{ride.available_seats}</td>

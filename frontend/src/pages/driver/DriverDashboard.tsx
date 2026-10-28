@@ -57,9 +57,7 @@ export function DriverDashboard() {
   const renderRideCard = (ride: Ride) => (
     <div key={ride.id} className="ride-card">
       <div className="ride-route">
-        <span className="origin">{ride.origin.name}</span>
-        <span className="arrow">&rarr;</span>
-        <span className="destination">{ride.destination.name}</span>
+        {ride.stops.map((stop, index) => <span key={stop.position}>{index > 0 && <span className="arrow">&rarr;</span>}<span className={index === 0 ? 'origin' : 'destination'}>{stop.location.name}</span></span>)}
       </div>
       <div className="ride-info">
         <span className="time">{formatTime(ride.departure_time)}</span>

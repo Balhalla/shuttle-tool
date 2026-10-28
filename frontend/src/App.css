@@ -546,6 +546,15 @@ body {
   font-weight: bold;
 }
 
+.seat-count-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .departed-badge {
   background: #6c757d;
   color: white;
@@ -583,6 +592,11 @@ body {
 .role-badge.driver {
   background: #17a2b8;
   color: white;
+}
+
+.role-badge.vip {
+  background: #d4a017;
+  color: #fff;
 }
 
 .role-badge.public {
@@ -805,35 +819,6 @@ body {
 }
 
 /* Driver Availability Timeline */
-.timeline-controls {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.timeline-festival-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: #333;
-}
-
-.timeline-festival-summary span {
-  color: #666;
-}
-
-.timeline-day-boundary {
-  flex-basis: 100%;
-  color: #666;
-}
-
-.timeline-program-hint {
-  flex-basis: 100%;
-  color: #6d28d9;
-}
-
 .timeline-no-dates {
   padding: 2rem;
   border: 1px solid #dee2e6;
@@ -1254,6 +1239,125 @@ body {
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+.timeline-ride-info {
+  position: fixed;
+  z-index: 1200;
+  width: min(280px, calc(100vw - 1.5rem));
+  padding: 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+  color: #1f2937;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.timeline-ride-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.timeline-ride-info-header strong {
+  font-size: 0.95rem;
+}
+
+.timeline-ride-info-vip {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: #d4a017;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.timeline-ride-info-time {
+  margin: 0.2rem 0 0.55rem;
+  color: #64748b;
+}
+
+.timeline-ride-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.timeline-ride-info-row > span,
+.timeline-ride-info-drivers > span {
+  color: #64748b;
+}
+
+.timeline-ride-info-row strong.warning {
+  color: #b42318;
+}
+
+.timeline-ride-info-row strong.full {
+  color: #2f7d48;
+}
+
+.timeline-ride-info-drivers {
+  padding-top: 0.45rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.timeline-ride-info-passengers {
+  padding-top: 0.45rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.timeline-ride-info-drivers ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1rem;
+}
+
+.timeline-ride-info-passengers ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline-ride-info-passengers li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.timeline-ride-info-passengers li span:last-child {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.timeline-ride-info-passengers small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #64748b;
+}
+
+.timeline-ride-info-warning {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #b42318;
+  font-weight: 600;
+}
+
+.timeline-ride-info-hint {
+  margin-top: 0.55rem;
+  color: #64748b;
+  font-size: 0.72rem;
 }
 
 .timeline-block.program-item {
@@ -2290,4 +2394,88 @@ body {
     padding: 0.25rem 0.4rem;
     font-size: 0.7rem;
   }
+}
+.ride-stop-order-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  border: 1px solid #d8dee8;
+  border-radius: 4px;
+  margin-bottom: 0.35rem;
+  cursor: grab;
+}
+
+.ride-stop-order-list li:active {
+  cursor: grabbing;
+}
+
+.ride-stop-order-list li.ride-stop-drop-target {
+  border-color: #2878c8;
+  background: #edf6ff;
+}
+
+.ride-stop-order-list li[draggable="false"] {
+  cursor: default;
+}
+
+.ride-stop-drag-handle {
+  color: #657286;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.ride-stop-name {
+  flex: 1;
+}
+
+.ride-stop-remove {
+  border: 0;
+  background: transparent;
+  color: #687386;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+}
+
+.ride-stop-remove:hover {
+  color: #b42318;
+}
+
+.ride-stop-plan-status {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.ride-stop-plan-status ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.ride-stop-plan-badge {
+  color: #17633a;
+  border-color: #a8d5b8;
+  background: #edf8f0;
+}
+
+.ride-stop-plan-status.invalid,
+.ride-stop-plan-badge.invalid {
+  color: #9e2923;
+  border-color: #e2aaa7;
+  background: #fff0ef;
+}
+
+.ride-stop-plan-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  vertical-align: middle;
 }

@@ -11,7 +11,7 @@ export interface User {
   id: number;
   email: string;
   name: string;
-  role: 'public' | 'driver' | 'admin';
+  role: 'public' | 'vip' | 'driver' | 'admin';
   phone?: string;
   default_car?: Car;
   created_at: string;
@@ -53,6 +53,7 @@ export interface Ride {
   origin_id?: number;
   destination: Location;
   destination_id?: number;
+  stops: RideStop[];
   departure_time: string;
   is_vip: boolean;
   is_deleted?: boolean;
@@ -60,6 +61,7 @@ export interface Ride {
   available_seats: number;
   remaining_capacity: number;
   seats_remaining: number;
+  selected_seats_remaining?: number | null;
   reserved_seats: number;
   is_full: boolean;
   registration_open: boolean;
@@ -68,12 +70,21 @@ export interface Ride {
   created_at: string;
 }
 
+export interface RideStop {
+  position: number;
+  location: Location;
+  estimated_time: string | null;
+}
+
 export interface Reservation {
   id: number;
   ride: Ride;
   user?: User;
   guest_email: string;
   guest_name: string;
+  seats: number;
+  pickup_position: number;
+  dropoff_position: number;
   status: 'pending' | 'confirmed' | 'cancelled';
   added_by_admin: boolean;
   is_present: boolean;
@@ -86,6 +97,9 @@ export interface DriverPassenger {
   id: number;
   name: string;
   phone: string;
+  seats: number;
+  pickup_position: number;
+  dropoff_position: number;
   status: string;
   is_present: boolean;
   marked_present_by_id: number | null;
@@ -98,6 +112,9 @@ export interface Passenger {
   email: string;
   name: string;
   phone: string;
+  seats: number;
+  pickup_position: number;
+  dropoff_position: number;
   status: string;
   added_by_admin: boolean;
   is_present: boolean;
@@ -141,9 +158,12 @@ export interface PassengerRide {
   ride_id: number;
   origin: string;
   destination: string;
+  origin_name: string;
+  destination_name: string;
   departure_time: string;
   status: string;
   is_vip: boolean;
+  seats: number;
 }
 
 export interface PassengerOverview {
@@ -165,12 +185,25 @@ export interface TimelineAssignment {
   ride_id: number;
   origin: string;
   destination: string;
+  origin_name: string;
+  destination_name: string;
+  route_label: string;
   departure_time: string;
+  estimated_end_time: string;
   is_vip: boolean;
   car_name: string;
   reserved_seats: number;
   total_seats: number;
+  passengers: TimelineRidePassenger[];
   has_departed: boolean;
+}
+
+export interface TimelineRidePassenger {
+  name: string;
+  seats: number;
+  status: 'pending' | 'confirmed';
+  pickup?: string;
+  dropoff?: string;
 }
 
 export interface DriverTimeline {
@@ -204,10 +237,15 @@ export interface TimelineUnassignedRide {
   id: number;
   origin: string;
   destination: string;
+  origin_name: string;
+  destination_name: string;
+  route_label: string;
   departure_time: string;
+  estimated_end_time: string;
   is_vip: boolean;
   reserved_seats: number;
   total_seats: number;
+  passengers: TimelineRidePassenger[];
 }
 
 export interface SiteSettings {

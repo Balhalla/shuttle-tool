@@ -13,7 +13,7 @@ export function AdminUsers() {
   const [form, setForm] = useState({
     email: '',
     name: '',
-    role: 'public' as 'public' | 'driver' | 'admin',
+    role: 'public' as User['role'],
     phone: '',
   });
 
@@ -60,7 +60,7 @@ export function AdminUsers() {
     setShowForm(true);
   };
 
-  const handleRoleChange = async (user: User, newRole: 'public' | 'driver' | 'admin') => {
+  const handleRoleChange = async (user: User, newRole: User['role']) => {
     if (user.id === currentUser?.id && newRole !== 'admin') {
       if (!confirm('You are about to remove your own admin privileges. Are you sure?')) {
         return;
@@ -106,6 +106,8 @@ export function AdminUsers() {
         return 'role-badge admin';
       case 'driver':
         return 'role-badge driver';
+      case 'vip':
+        return 'role-badge vip';
       default:
         return 'role-badge public';
     }
@@ -167,10 +169,11 @@ export function AdminUsers() {
                   id="role"
                   value={form.role}
                   onChange={(e) =>
-                    setForm({ ...form, role: e.target.value as 'public' | 'driver' | 'admin' })
+                    setForm({ ...form, role: e.target.value as User['role'] })
                   }
                 >
                   <option value="public">Public</option>
+                  <option value="vip">VIP</option>
                   <option value="driver">Driver</option>
                   <option value="admin">Admin</option>
                 </select>
@@ -212,11 +215,12 @@ export function AdminUsers() {
                 <select
                   value={user.role}
                   onChange={(e) =>
-                    handleRoleChange(user, e.target.value as 'public' | 'driver' | 'admin')
+                    handleRoleChange(user, e.target.value as User['role'])
                   }
                   className={getRoleBadgeClass(user.role)}
                 >
                   <option value="public">Public</option>
+                  <option value="vip">VIP</option>
                   <option value="driver">Driver</option>
                   <option value="admin">Admin</option>
                 </select>

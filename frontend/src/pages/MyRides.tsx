@@ -80,9 +80,9 @@ export function MyRides() {
     <div key={reservation.id} className="ride-card">
       <div className="ride-details">
         <div className="ride-route">
-          {reservation.ride.origin.name}
+          {reservation.ride.stops[reservation.pickup_position]?.location.name ?? reservation.ride.origin.name}
           <span className="arrow">&rarr;</span>
-          {reservation.ride.destination.name}
+          {reservation.ride.stops[reservation.dropoff_position]?.location.name ?? reservation.ride.destination.name}
         </div>
         <div className="departure-time">
           {formatTime(reservation.ride.departure_time)}
@@ -90,6 +90,9 @@ export function MyRides() {
         <div className="ride-info">
           <span className={`status-badge status-${reservation.status}`}>
             {reservation.status}
+          </span>
+          <span className="seat-count-badge">
+            {reservation.seats} {reservation.seats === 1 ? 'seat' : 'seats'}
           </span>
           {reservation.ride.is_vip && <span className="vip-badge">VIP</span>}
         </div>

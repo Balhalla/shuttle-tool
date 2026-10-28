@@ -39,8 +39,8 @@ class RideAssignmentInline(admin.TabularInline):
 @admin.register(Ride)
 class RideAdmin(admin.ModelAdmin):
     list_display = ['id', 'origin', 'destination', 'departure_time', 'available_seats', 'is_vip']
-    list_filter = ['is_vip', 'departure_time', 'origin', 'destination']
-    search_fields = ['origin__name', 'destination__name']
+    list_filter = ['is_vip', 'departure_time']
+    search_fields = ['route_stops__location__name']
     raw_id_fields = ['created_by']
     inlines = [RideAssignmentInline]
 

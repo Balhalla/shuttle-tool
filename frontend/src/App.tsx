@@ -63,7 +63,7 @@ function AppRoutes() {
         <Route
           path="my-rides"
           element={
-            <ProtectedRoute allowedRoles={['public', 'driver', 'admin']}>
+            <ProtectedRoute allowedRoles={['public', 'vip', 'driver', 'admin']}>
               <MyRides />
             </ProtectedRoute>
           }

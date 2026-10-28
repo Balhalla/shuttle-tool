@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { PhoneInput, PhoneLink } from '../../components/PhoneInput';
-import type { Ride, Passenger } from '../../types';
+import type { Ride, Passenger, User } from '../../types';
 
 export function AdminRidePassengers() {
   const { rideId } = useParams<{ rideId: string }>();
@@ -13,6 +13,10 @@ export function AdminRidePassengers() {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
+  const [vipUsers, setVipUsers] = useState<User[]>([]);
+  const [selectedVipUserId, setSelectedVipUserId] = useState('');
+  const [pickupPosition, setPickupPosition] = useState(0);
+  const [dropoffPosition, setDropoffPosition] = useState(1);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -27,13 +31,15 @@ export function AdminRidePassengers() {
     if (!rideId) return;
     const id = parseInt(rideId);
     try {
-      const [ridesData, passengersData] = await Promise.all([
+      const [ridesData, passengersData, vipUsersData] = await Promise.all([
         api.adminGetRides(),
         api.adminGetRidePassengers(id),
+        api.adminGetUsers('vip'),
       ]);
       const foundRide = ridesData.find(r => r.id === id);
       setRide(foundRide || null);
       setPassengers(passengersData);
+      setVipUsers([...vipUsersData].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -58,11 +64,12 @@ export function AdminRidePassengers() {
           name: form.name,
           email: form.email || undefined,
           phone: form.phone || undefined,
+          user_id: selectedVipUserId ? Number(selectedVipUserId) : undefined,
+          pickup_position: pickupPosition,
+          dropoff_position: dropoffPosition,
         });
       }
-      setForm({ name: '', email: '', phone: '' });
-      setShowForm(false);
-      setEditingPassenger(null);
+      resetPassengerForm();
       loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save passenger');
@@ -76,7 +83,33 @@ export function AdminRidePassengers() {
       phone: passenger.phone || '',
     });
     setEditingPassenger(passenger);
+    setSelectedVipUserId('');
+    setPickupPosition(passenger.pickup_position);
+    setDropoffPosition(passenger.dropoff_position);
     setShowForm(true);
+  };
+
+  const resetPassengerForm = () => {
+    setForm({ name: '', email: '', phone: '' });
+    setSelectedVipUserId('');
+    setPickupPosition(0);
+    setDropoffPosition(ride ? ride.stops.length - 1 : 1);
+    setShowForm(false);
+    setEditingPassenger(null);
+  };
+
+  const handleVipSelect = (userId: string) => {
+    setSelectedVipUserId(userId);
+    const vipUser = vipUsers.find((user) => user.id === Number(userId));
+    if (!vipUser) {
+      setForm({ name: '', email: '', phone: '' });
+      return;
+    }
+    setForm({
+      name: vipUser.name,
+      email: vipUser.email,
+      phone: vipUser.phone || '',
+    });
   };
 
   const handleRemovePassenger = async (reservationId: number) => {
@@ -111,7 +144,9 @@ export function AdminRidePassengers() {
     return <div className="error">Ride not found</div>;
   }
 
-  const confirmedCount = passengers.filter(p => p.status === 'confirmed').length;
+  const confirmedCount = passengers
+    .filter(p => p.status === 'confirmed')
+    .reduce((total, passenger) => total + passenger.seats, 0);
 
   return (
     <div className="admin-ride-passengers">
@@ -122,7 +157,7 @@ export function AdminRidePassengers() {
       <div className="ride-header">
         <h1>Manage Passengers</h1>
         <p className="ride-info-summary">
-          {ride.origin.name} &rarr; {ride.destination.name}
+          {ride.stops.map((stop, index) => <span key={stop.position}>{index > 0 && ' → '}{stop.location.name}</span>)}
           <br />
           <span className="departure-time">{formatTime(ride.departure_time)}</span>
           {ride.is_vip && <span className="vip-badge">VIP</span>}
@@ -140,7 +175,7 @@ export function AdminRidePassengers() {
         </div>
         <div className="stat">
           <span className="stat-label">Available</span>
-          <span className="stat-value">{ride.available_seats - confirmedCount}</span>
+          <span className="stat-value">{ride.seats_remaining}</span>
         </div>
       </div>
 
@@ -171,7 +206,10 @@ export function AdminRidePassengers() {
       <div className="page-header">
         <h2>Passengers ({passengers.length})</h2>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            resetPassengerForm();
+            setShowForm(true);
+          }}
           className="btn btn-primary"
         >
           Add Passenger
@@ -183,6 +221,46 @@ export function AdminRidePassengers() {
           <div className="modal">
             <h2>{editingPassenger ? 'Edit Passenger' : 'Add Passenger'}</h2>
             <form onSubmit={handleAddPassenger}>
+              {!editingPassenger && ride && <>
+                <div className="form-group">
+                  <label htmlFor="passenger-pickup">Pickup stop</label>
+                  <select id="passenger-pickup" value={pickupPosition} onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setPickupPosition(value);
+                    setDropoffPosition(Math.max(value + 1, dropoffPosition));
+                  }}>
+                    {ride.stops.slice(0, -1).map((stop) => <option key={stop.position} value={stop.position}>{stop.position + 1}. {stop.location.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="passenger-dropoff">Drop-off stop</label>
+                  <select id="passenger-dropoff" value={dropoffPosition} onChange={(e) => setDropoffPosition(Number(e.target.value))}>
+                    {ride.stops.filter((stop) => stop.position > pickupPosition).map((stop) => <option key={stop.position} value={stop.position}>{stop.position + 1}. {stop.location.name}</option>)}
+                  </select>
+                </div>
+              </>}
+              {!editingPassenger && (
+                <div className="form-group">
+                  <label htmlFor="vip-user">Quick add VIP user</label>
+                  <select
+                    id="vip-user"
+                    value={selectedVipUserId}
+                    onChange={(e) => handleVipSelect(e.target.value)}
+                  >
+                    <option value="">Select a VIP user...</option>
+                    {vipUsers.map((vipUser) => (
+                      <option key={vipUser.id} value={vipUser.id}>
+                        {vipUser.name} ({vipUser.email})
+                      </option>
+                    ))}
+                  </select>
+                  {vipUsers.length === 0 && (
+                    <small style={{ color: '#666' }}>
+                      No VIP users are configured yet.
+                    </small>
+                  )}
+                </div>
+              )}
               <div className="form-group">
                 <label htmlFor="name">Name *</label>
                 <input
@@ -220,11 +298,7 @@ export function AdminRidePassengers() {
               <div className="form-actions">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingPassenger(null);
-                    setForm({ name: '', email: '', phone: '' });
-                  }}
+                  onClick={resetPassengerForm}
                   className="btn btn-secondary"
                 >
                   Cancel
@@ -248,6 +322,7 @@ export function AdminRidePassengers() {
               <th>Name</th>
               <th>Phone</th>
               <th>Email</th>
+              <th>Seats</th>
               <th>Status</th>
               <th>Source</th>
               <th>Actions</th>
@@ -257,9 +332,10 @@ export function AdminRidePassengers() {
             {passengers.map((passenger, index) => (
               <tr key={passenger.id}>
                 <td>{index + 1}</td>
-                <td>{passenger.name}</td>
+                <td>{passenger.name}<small style={{ display: 'block' }}>{ride?.stops[passenger.pickup_position]?.location.short_name} → {ride?.stops[passenger.dropoff_position]?.location.short_name}</small></td>
                 <td><PhoneLink phone={passenger.phone} className="phone-link" /></td>
                 <td>{passenger.email || '-'}</td>
+                <td>{passenger.seats}</td>
                 <td>
                   <span className={`status-badge status-${passenger.status}`}>
                     {passenger.status}
